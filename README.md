@@ -48,10 +48,19 @@ collegamento è visibile su `GET /api/ai/status`.
 
 In alto a destra si cambia ruolo (RBAC applicato dal backend):
 
-- **Maria Rossi** — Operatore protocollo (classifica, prende in carico)
-- **Geom. Esposito** — Responsabile UT (lavora, genera bozze)
-- **Geom. De Luca** — Istruttore tecnico
-- **Dott.ssa Bianchi** — Segretario (supervisiona, riassegna)
+**Protocollo**
+- **Maria Rossi** — Operatore protocollo (classifica, prende in carico, smista)
+- **Dott.ssa Bianchi** — Segretario (supervisione, cruscotto completo)
+
+**Istruttori**
+- **Geom. Esposito** — Responsabile Ufficio Tecnico (lavora, genera bozze)
+- **Geom. De Luca** — Istruttore tecnico (istruttoria, bozze)
+
+**Responsabili di ufficio**
+- **Rag. Ferrara** — Ragioneria / Tributi (IMU, TARI, liquidazioni)
+- **Dott. Russo** — Anagrafe e Stato Civile (demografici, residenza)
+- **Comm. Moretti** — Polizia Locale (viabilità, sanzioni, SUAP)
+- **A.S. Ricci** — Servizi Sociali (contributi, SAD, welfare)
 
 ## Flusso dimostrabile
 
@@ -168,6 +177,16 @@ Utenti pre-configurati nel realm `trasparentia` (password: `comune2026!`):
 | `bianchi` | Segretario | supervisione, riassegna |
 
 Con `KC_AUTH_ENABLED=false` (default) si torna alla modalità demo.
+
+## Documentazione
+
+| Documento | Contenuto |
+|---|---|
+| [`docs/TrasParentIA_Flussi_Uffici.md`](docs/TrasParentIA_Flussi_Uffici.md) | Flussi lavorativi dettagliati dei 6 uffici: procedimenti, termini, atti finali, flussi inter-ufficio |
+| [`P4_AVVIO_DATI_REALI.md`](P4_AVVIO_DATI_REALI.md) | Guida go-live dati reali (PEC reale, primo lotto, golden set) |
+| [`P5_COLLAUDO_CUTOVER.md`](P5_COLLAUDO_CUTOVER.md) | Collaudo end-to-end e cutover in produzione |
+| [`BACKUP.md`](BACKUP.md) | Backup, ripristino e disaster recovery |
+| [`MANUALE_UTENTE.md`](MANUALE_UTENTE.md) | Manuale operativo per il personale comunale |
 
 ## Comandi utili
 
