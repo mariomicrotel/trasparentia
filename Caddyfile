@@ -1,0 +1,48 @@
+{
+	admin off
+	# Per TLS su LAN interna: decommenta le due righe sotto e commenta "auto_https off"
+	# local_certs
+	# auto_https disable_redirects
+	auto_https off
+}
+
+# Porta 80 — ingresso unico. In produzione LAN sostituire con IP/hostname dell'ente:
+# http://192.168.1.20 { ... }
+:80 {
+	# Header di sicurezza
+	header {
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Health check (utile per load balancer / monitoring)
+	handle /health {
+		reverse_proxy backend:8000
+	}
+
+	# API FastAPI
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Documentazione Swagger (opzionale in produzione, rimuovere)
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	# Frontend React (tutto il resto)
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

@@ -1,0 +1,181 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trasparentia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trasparentia}
+      POSTGRES_DB: ${POSTGRES_DB:-trasparentia}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trasparentia}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-trasparentia}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-trasparentia}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9101:9001"   # console MinIO (http://localhost:9101)
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment: &backend_env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-trasparentia}:${POSTGRES_PASSWORD:-trasparentia}@db:5432/${POSTGRES_DB:-trasparentia}
+      REDIS_URL: redis://redis:6379/0
+      PEC_POLL_INTERVAL_MINUTES: ${PEC_POLL_INTERVAL_MINUTES:-10}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL_GEN: ${AI_MODEL_GEN:-qwen2.5:7b-instruct}
+      AI_MODEL_EMBED: ${AI_MODEL_EMBED:-nomic-embed-text}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-trasparentia}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-trasparentia}
+      MINIO_BUCKET: ${MINIO_BUCKET:-trasparentia}
+      MINIO_SECURE: "false"
+      PEC_HOST: ${PEC_HOST:-}
+      PEC_PORT: ${PEC_PORT:-993}
+      PEC_USER: ${PEC_USER:-}
+      PEC_PASSWORD: ${PEC_PASSWORD:-}
+      PEC_FOLDER: ${PEC_FOLDER:-INBOX}
+      OCR_ENABLED: ${OCR_ENABLED:-true}
+      ENTE_NOME: ${ENTE_NOME:-Comune di Roccadaspide}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      NOTIFICHE_EMAIL_ENABLED: ${NOTIFICHE_EMAIL_ENABLED:-false}
+      BACKUP_DIR: /data/backup
+      KC_AUTH_ENABLED: ${KC_AUTH_ENABLED:-false}
+      KC_INTERNAL_URL: ${KC_INTERNAL_URL:-http://keycloak:8080}
+      KC_PUBLIC_URL: ${KC_PUBLIC_URL:-http://localhost:8090}
+      KC_REALM: ${KC_REALM:-trasparentia}
+      KC_CLIENT_ID: ${KC_CLIENT_ID:-trasparentia-app}
+      CORS_ORIGINS: http://localhost:8099,http://localhost:5173,http://localhost:80,http://localhost
+      ALBO_ESTERNO_URL: ${ALBO_ESTERNO_URL:-}
+      ALBO_ESTERNO_API_KEY: ${ALBO_ESTERNO_API_KEY:-}
+      PROTOCOLLO_ESTERNO_URL: ${PROTOCOLLO_ESTERNO_URL:-}
+      PROTOCOLLO_ESTERNO_API_KEY: ${PROTOCOLLO_ESTERNO_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - backupdata:/data/backup
+    ports:
+      - "8008:8000"   # debug diretto; in produzione rimuovere, usare solo Caddy
+
+  worker:
+    build: ./backend
+    command: celery -A app.celery_app:celery worker --loglevel=info --concurrency=2 -Q celery
+    environment: *backend_env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - backupdata:/data/backup
+    restart: unless-stopped
+
+  beat:
+    build: ./backend
+    command: celery -A app.celery_app:celery beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    environment: *backend_env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: 8080
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    ports:
+      - "8091:8080"   # console admin: http://localhost:8091
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8099:80"     # debug diretto; in produzione usare solo Caddy
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  restic-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.restic
+    environment:
+      RESTIC_REPOSITORY: /restic-repo
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:?Impostare RESTIC_PASSWORD in .env}
+    volumes:
+      - backupdata:/data/backup:ro
+      - resticrepo:/restic-repo
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  miniodata:
+  redisdata:
+  backupdata:
+  caddydata:
+  caddyconfig:
+  resticrepo:

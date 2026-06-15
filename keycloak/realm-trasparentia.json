@@ -1,0 +1,104 @@
+{
+  "realm": "trasparentia",
+  "displayName": "TrasParentIA Micro PA",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "internationalizationEnabled": false,
+  "defaultLocale": "it",
+  "clients": [
+    {
+      "clientId": "trasparentia-app",
+      "name": "TrasParentIA Micro PA",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8099/*",
+        "http://localhost:5173/*",
+        "http://localhost/*",
+        "http://localhost:80/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8099",
+        "http://localhost:5173",
+        "http://localhost",
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "operatore_protocollo", "description": "Operatore Protocollo — classifica e protocolla comunicazioni" },
+      { "name": "responsabile_ut", "description": "Responsabile Ufficio Tecnico — lavora pratiche, genera bozze" },
+      { "name": "istruttore", "description": "Istruttore Tecnico — istruttoria pratiche" },
+      { "name": "segretario", "description": "Segretario Comunale — supervisione e riassegnazioni" }
+    ]
+  },
+  "users": [
+    {
+      "username": "rossi",
+      "email": "rossi@comune.it",
+      "firstName": "Maria",
+      "lastName": "Rossi",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "realmRoles": ["operatore_protocollo"]
+    },
+    {
+      "username": "esposito",
+      "email": "esposito@comune.it",
+      "firstName": "Luigi",
+      "lastName": "Esposito",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "realmRoles": ["responsabile_ut"]
+    },
+    {
+      "username": "deluca",
+      "email": "deluca@comune.it",
+      "firstName": "Sara",
+      "lastName": "De Luca",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "realmRoles": ["istruttore"]
+    },
+    {
+      "username": "bianchi",
+      "email": "bianchi@comune.it",
+      "firstName": "Anna",
+      "lastName": "Bianchi",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "realmRoles": ["segretario"]
+    }
+  ]
+}

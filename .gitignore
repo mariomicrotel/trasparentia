@@ -1,0 +1,48 @@
+# Dipendenze
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment e segreti — NON committare MAI
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Build frontend
+frontend/dist/
+
+# Docker volumes e dati runtime
+*.log
+celerybeat-schedule
+/data/
+
+# IDE e tool locali
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python virtual env
+venv/
+.venv/
+env/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Restic / backup locali
+restic-repo/
