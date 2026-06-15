@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { api } from "../api.js";
 import { Icon } from "../icons.jsx";
 import { Badge, fmtDate } from "../ui.jsx";
@@ -6,8 +8,6 @@ import { Badge, fmtDate } from "../ui.jsx";
 const STATO_TONE = { ottimo: "verde", buono: "verde", discreto: "blu", scarso: "ambra", critico: "rosso" };
 const STATO_COLOR = { ottimo: "#1a7a45", buono: "#1a7a45", discreto: "#0066cc", scarso: "#a66300", critico: "#d9364f" };
 const TIPO_ICO = { immobile: "building", mobile: "box", infrastruttura: "route" };
-
-// Mappa Leaflet caricata dinamicamente (nessun import statico per compatibilità SSR)
 function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
@@ -17,8 +17,6 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
   // Inizializzazione mappa
   useEffect(() => {
     if (mapRef.current && leafletRef.current) return; // già inizializzata
-    const L = window.L;
-    if (!L) return;
 
     const center = list.find((b) => b.lat && b.lon) || {};
     const map = L.map("inventario-map", { zoomControl: true }).setView(
@@ -47,9 +45,8 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
 
   // Aggiorna marker al cambio della lista
   useEffect(() => {
-    const L = window.L;
     const map = leafletRef.current;
-    if (!L || !map) return;
+    if (!map) return;
 
     // Rimuovi marker orfani
     Object.keys(markersRef.current).forEach((id) => {
@@ -79,9 +76,8 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
 
   // Evidenzia il marker del bene selezionato
   useEffect(() => {
-    const L = window.L;
     const map = leafletRef.current;
-    if (!L || !map || !sel) return;
+    if (!map || !sel) return;
     Object.entries(markersRef.current).forEach(([id, m]) => {
       const b = list.find((x) => x.id === id);
       if (!b) return;
@@ -131,7 +127,7 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
   const [vista, setVista] = useState("lista"); // "lista" | "mappa"
   const [importing, setImporting] = useState(false);
   const [esitoImport, setEsitoImport] = useState(null);
-  const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
+  const leafletLoaded = true; // Leaflet è importato staticamente
   const fileRef = useRef(null);
 
   const canAdmin = !!(M.perm?.[me]?.supervisione);
@@ -143,18 +139,6 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
 
   useEffect(() => { carica(); }, [tick]);
 
-  // Carica Leaflet CSS+JS la prima volta che si apre la mappa
-  useEffect(() => {
-    if (vista !== "mappa" || window.L) { if (window.L) setLeafletLoaded(true); return; }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(link);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.onload = () => setLeafletLoaded(true);
-    document.head.appendChild(script);
-  }, [vista]);
 
   async function onFile(e) {
     const file = e.target.files?.[0];
