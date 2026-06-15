@@ -1,7 +1,7 @@
-tipo,categoria,denominazione,ubicazione,codice,stato,responsabile,valoreContabile,annoAcquisizione,note
-immobile,edificio_pubblico,Municipio,Piazza del Comune 1,IM-001,buono,bianchi,500000,1960,Sede principale degli uffici comunali
-immobile,edificio_pubblico,Scuola Elementare,Via Roma 10,IM-002,discreto,bianchi,300000,1975,
-immobile,area_verde,Parco Comunale,Via Verde 5,IM-003,buono,,0,,
-mobile,veicolo,Fiat Doblò Furgone,Deposito Comunale,VE-001,buono,bianchi,18000,2019,Targa AB123CD
-infrastruttura,strada,Via Roma,,,buono,bianchi,,,Lunghezza 850 m
-infrastruttura,rete_idrica,Rete acquedotto zona nord,,,discreto,bianchi,,,
+tipo,categoria,denominazione,ubicazione,codice,stato,responsabile,lat,lon,valoreContabile,annoAcquisizione,note
+immobile,edificio_pubblico,Municipio,Piazza del Comune 1,IM-001,buono,bianchi,40.4162,15.2014,500000,1960,Sede principale degli uffici comunali
+immobile,edificio_pubblico,Scuola Elementare,Via Roma 10,IM-002,discreto,bianchi,40.4150,15.2030,300000,1975,
+immobile,area_verde,Parco Comunale,Via Verde 5,IM-003,buono,,40.4145,15.1990,0,,
+mobile,veicolo,Fiat Doblò Furgone,Deposito Comunale,VE-001,buono,bianchi,,,18000,2019,Targa AB123CD
+infrastruttura,strada,Via Roma,,,buono,bianchi,,,,,Lunghezza 850 m
+infrastruttura,rete_idrica,Rete acquedotto zona nord,,,discreto,bianchi,,,,,

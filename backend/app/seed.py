@@ -212,21 +212,27 @@ def seed(db):
     beni = [
         dict(id="BEN-001", tipo="immobile", categoria="edificio_pubblico", denominazione="Palazzo Municipale",
              ubicazione="Piazza Municipio, 1", codice="IMM/2024/001", stato="buono", responsabile="bianchi",
+             lat=40.4162, lon=15.2014,
              dati={"foglio": "8", "particella": "120", "valoreContabile": 480000, "annoAcquisizione": 1952, "ultimaVerifica": day_from(-180), "scadenzaCollaudo": None, "note": "Sede degli uffici comunali."}),
         dict(id="BEN-003", tipo="immobile", categoria="area_verde", denominazione="Villa Comunale",
              ubicazione="Via delle Fontane", codice="IMM/2024/003", stato="discreto", responsabile="esposito",
+             lat=40.4148, lon=15.2005,
              dati={"foglio": "11", "particella": "88", "valoreContabile": 95000, "annoAcquisizione": 1935, "ultimaVerifica": day_from(-60), "scadenzaCollaudo": None, "note": "Muro di contenimento perimetrale in ammaloramento (cfr. segnalazione PEC-2026-00190)."}),
         dict(id="BEN-005", tipo="mobile", categoria="veicolo", denominazione="Autocarro — Iveco Daily",
              ubicazione="Rimessa comunale", codice="MOB/2024/005", stato="scarso", responsabile="esposito",
+             lat=40.4170, lon=15.1998,
              dati={"targa": "SA 211 KT", "valoreContabile": 22000, "annoAcquisizione": 2015, "ultimaVerifica": day_from(-400), "scadenzaCollaudo": day_from(-10), "note": "Revisione scaduta. Fermo in attesa di intervento."}),
         dict(id="BEN-006", tipo="infrastruttura", categoria="strada", denominazione="Via Nazionale — tratto urbano",
              ubicazione="Via Nazionale (civv. 1–140)", codice="INF/2024/006", stato="discreto", responsabile="esposito",
+             lat=40.4158, lon=15.2021,
              dati={"valoreContabile": 340000, "annoAcquisizione": 1988, "ultimaVerifica": day_from(-45), "scadenzaCollaudo": None, "note": "Manto stradale con buche diffuse. Incluso nel piano manutenzione 2026."}),
         dict(id="BEN-011", tipo="infrastruttura", categoria="rete_idrica", denominazione="Rete idrica — dorsale principale",
              ubicazione="Via Garibaldi – Via Mazzini", codice="INF/2024/011", stato="critico", responsabile="esposito",
+             lat=40.4172, lon=15.2007,
              dati={"valoreContabile": 520000, "annoAcquisizione": 1975, "ultimaVerifica": day_from(-500), "scadenzaCollaudo": day_from(-60), "note": "Perdite croniche (~18%). Intervento urgente necessario."}),
         dict(id="BEN-008", tipo="immobile", categoria="edificio_pubblico", denominazione="Centro Sociale Anziani",
              ubicazione="Via Cavour, 8", codice="IMM/2024/008", stato="scarso", responsabile="bianchi",
+             lat=40.4155, lon=15.1992,
              dati={"foglio": "10", "particella": "305", "valoreContabile": 210000, "annoAcquisizione": 1990, "ultimaVerifica": day_from(-380), "scadenzaCollaudo": day_from(10), "note": "Necessaria perizia per adeguamento antisismico."}),
     ]
     for b in beni:
@@ -287,6 +293,9 @@ def init_db():
     if engine.dialect.name == "postgresql":
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            # migrazione non-distruttiva: aggiunge colonne geo se assenti
+            conn.execute(text("ALTER TABLE beni ADD COLUMN IF NOT EXISTS lat FLOAT"))
+            conn.execute(text("ALTER TABLE beni ADD COLUMN IF NOT EXISTS lon FLOAT"))
             conn.commit()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

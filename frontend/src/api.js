@@ -63,6 +63,7 @@ export const api = {
   attoStato: (id, payload, me) => req("POST", `/api/atti/${encodeURIComponent(id)}/stato`, payload, me),
 
   listBeni: () => req("GET", "/api/beni"),
+  geoBene: (id, lat, lon, me) => req("PATCH", `/api/beni/${encodeURIComponent(id)}/geo`, { lat, lon }, me),
   qrUrl: (id) => `/api/beni/${encodeURIComponent(id)}/qr.png`,
 
   log: () => req("GET", "/api/log"),

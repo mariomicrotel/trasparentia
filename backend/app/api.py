@@ -712,6 +712,23 @@ def get_bene(bid: str, db: Session = Depends(get_db)):
     return b.dict()
 
 
+@router.patch("/beni/{bid}/geo")
+def set_bene_geo(bid: str, payload: dict, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Imposta o aggiorna le coordinate geografiche di un bene."""
+    require_perm(me, "supervisione")
+    b = db.get(models.Bene, bid)
+    if not b:
+        raise HTTPException(404, "Bene non trovato")
+    lat = payload.get("lat")
+    lon = payload.get("lon")
+    if lat is not None:
+        b.lat = float(lat)
+    if lon is not None:
+        b.lon = float(lon)
+    db.commit()
+    return b.dict()
+
+
 @router.get("/beni/{bid}/qr.png")
 def bene_qr(bid: str, db: Session = Depends(get_db)):
     b = db.get(models.Bene, bid)
@@ -1192,7 +1209,7 @@ def golden_set_valuta(
 
 # ---------- importazione CSV beni (P4) ----------
 
-_BENI_CAMPI_NOTI = {"tipo", "categoria", "denominazione", "ubicazione", "codice", "stato", "responsabile"}
+_BENI_CAMPI_NOTI = {"tipo", "categoria", "denominazione", "ubicazione", "codice", "stato", "responsabile", "lat", "lon"}
 _BENI_STATI_VALIDI = {"buono", "discreto", "scarso", "critico"}
 
 
@@ -1228,6 +1245,9 @@ async def import_beni_csv(
         if stato not in _BENI_STATI_VALIDI:
             stato = "buono"
         dati_extra = {k: v for k, v in row.items() if k not in _BENI_CAMPI_NOTI and v and k}
+        def _float_or_none(v):
+            try: return float(v) if v else None
+            except (ValueError, TypeError): return None
         bene = models.Bene(
             id=str(uuid.uuid4()),
             tipo=tipo,
@@ -1237,6 +1257,8 @@ async def import_beni_csv(
             codice=(row.get("codice") or "").strip(),
             stato=stato,
             responsabile=(row.get("responsabile") or None) or None,
+            lat=_float_or_none(row.get("lat")),
+            lon=_float_or_none(row.get("lon")),
             dati=dati_extra,
         )
         db.add(bene)

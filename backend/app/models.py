@@ -1,6 +1,6 @@
 """Modelli dati (SQLAlchemy). I campi annidati (mittente, allegati, ai,
 cronologia, bozze, albo) sono colonne JSON, coerenti con il dominio del prototipo."""
-from sqlalchemy import String, Boolean, Text, JSON
+from sqlalchemy import String, Boolean, Text, JSON, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 
@@ -198,6 +198,8 @@ class Bene(Base):
     codice: Mapped[str] = mapped_column(String, default="")
     stato: Mapped[str] = mapped_column(String, default="buono")
     responsabile: Mapped[str | None] = mapped_column(String, nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     dati: Mapped[dict] = mapped_column(JSON, default=dict)
 
     def dict(self):
