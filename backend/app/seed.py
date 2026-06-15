@@ -288,6 +288,152 @@ def seed_extra_uffici(db):
         db.commit()
 
 
+def seed_beni_informatica(db):
+    """PC, stampanti e videosorveglianza. Idempotente: inserisce solo gli id mancanti."""
+    # Coordinate edifici di riferimento
+    _MUN  = (40.4162, 15.2014)   # Palazzo Municipale
+    _CSA  = (40.4155, 15.1992)   # Centro Sociale Anziani
+    _VIL  = (40.4148, 15.2005)   # Villa Comunale
+    _VIA  = (40.4158, 15.2021)   # Via Nazionale
+
+    nuovi = [
+        # ---- PC (postazioni informatiche) --------------------------------
+        dict(id="PC-001", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Protocollo", ubicazione="Municipio – Ufficio Protocollo",
+             codice="PC/2024/001", stato="buono", responsabile="rossi",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "HP EliteDesk 800 G6", "cpu": "Intel i5-10500", "ram": "16 GB",
+                   "annoAcquisizione": 2021, "ultimaVerifica": day_from(-90), "note": ""}),
+        dict(id="PC-002", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Segreteria", ubicazione="Municipio – Segreteria Generale",
+             codice="PC/2024/002", stato="buono", responsabile="bianchi",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Lenovo ThinkCentre M70q", "cpu": "Intel i5-10400T", "ram": "8 GB",
+                   "annoAcquisizione": 2021, "ultimaVerifica": day_from(-90), "note": ""}),
+        dict(id="PC-003", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Ufficio Tecnico #1", ubicazione="Municipio – Ufficio Tecnico",
+             codice="PC/2024/003", stato="buono", responsabile="esposito",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Dell OptiPlex 7090", "cpu": "Intel i7-10700", "ram": "16 GB",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-60), "note": "Workstation CAD/GIS"}),
+        dict(id="PC-004", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Ufficio Tecnico #2", ubicazione="Municipio – Ufficio Tecnico",
+             codice="PC/2024/004", stato="discreto", responsabile="deluca",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "HP ProDesk 400 G7", "cpu": "Intel i5-10500", "ram": "8 GB",
+                   "annoAcquisizione": 2020, "ultimaVerifica": day_from(-120),
+                   "note": "Lento sul rendering DWG. Valutare upgrade RAM."}),
+        dict(id="PC-005", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Ragioneria / Tributi", ubicazione="Municipio – Ragioneria",
+             codice="PC/2024/005", stato="buono", responsabile="ferrara",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Lenovo ThinkCentre M90q Gen 3", "cpu": "Intel i5-1240P", "ram": "16 GB",
+                   "annoAcquisizione": 2023, "ultimaVerifica": day_from(-30), "note": ""}),
+        dict(id="PC-006", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Anagrafe e Stato Civile", ubicazione="Municipio – Anagrafe",
+             codice="PC/2024/006", stato="scarso", responsabile="russo",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Dell OptiPlex 3060", "cpu": "Intel i3-8100", "ram": "4 GB",
+                   "annoAcquisizione": 2018, "ultimaVerifica": day_from(-200),
+                   "note": "Macchina obsoleta. Lenta con applicativo ANPR. Priorità sostituzione."}),
+        dict(id="PC-007", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Polizia Locale", ubicazione="Municipio – Polizia Locale",
+             codice="PC/2024/007", stato="buono", responsabile="moretti",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "HP ProDesk 400 G8", "cpu": "Intel i5-11500", "ram": "8 GB",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-60), "note": ""}),
+        dict(id="PC-008", tipo="mobile", categoria="informatica",
+             denominazione="PC Postazione Servizi Sociali", ubicazione="Municipio – Servizi Sociali",
+             codice="PC/2024/008", stato="buono", responsabile="ricci",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Lenovo ThinkCentre M70q Gen 3", "cpu": "Intel i5-1235U", "ram": "8 GB",
+                   "annoAcquisizione": 2023, "ultimaVerifica": day_from(-30), "note": ""}),
+
+        # ---- Stampanti ----------------------------------------------------
+        dict(id="STM-001", tipo="mobile", categoria="stampante",
+             denominazione="Stampante multifunzione – Segreteria / Protocollo", ubicazione="Municipio – Piano terra",
+             codice="STM/2024/001", stato="buono", responsabile="rossi",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Canon imageRUNNER ADVANCE DX 4725i", "tipo_stampa": "Laser A3/A4 b/n + colore",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-45), "note": "Contratto manutenzione attivo (scade 2026-12)."}),
+        dict(id="STM-002", tipo="mobile", categoria="stampante",
+             denominazione="Stampante A4 – Ufficio Tecnico", ubicazione="Municipio – Ufficio Tecnico",
+             codice="STM/2024/002", stato="buono", responsabile="esposito",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Brother HL-L8360CDW", "tipo_stampa": "Laser A4 colore",
+                   "annoAcquisizione": 2021, "ultimaVerifica": day_from(-90), "note": ""}),
+        dict(id="STM-003", tipo="mobile", categoria="stampante",
+             denominazione="Plotter A0 – Ufficio Tecnico", ubicazione="Municipio – Ufficio Tecnico",
+             codice="STM/2024/003", stato="discreto", responsabile="esposito",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "HP DesignJet T650 36\"", "tipo_stampa": "Inkjet A0",
+                   "annoAcquisizione": 2019, "ultimaVerifica": day_from(-180),
+                   "note": "Cartucce Magenta in esaurimento. Test colore insoddisfacente."}),
+        dict(id="STM-004", tipo="mobile", categoria="stampante",
+             denominazione="Stampante A4 – Ragioneria / Anagrafe", ubicazione="Municipio – Piano primo",
+             codice="STM/2024/004", stato="scarso", responsabile="ferrara",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "HP LaserJet Pro M404n", "tipo_stampa": "Laser A4 b/n",
+                   "annoAcquisizione": 2017, "ultimaVerifica": day_from(-300),
+                   "note": "Alimentatore carta difettoso. Spesso inceppamenti. Valutare sostituzione."}),
+
+        # ---- Videosorveglianza -------------------------------------------
+        dict(id="VDC-001", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="Telecamera – Ingresso Palazzo Municipale (est.)", ubicazione="Municipio – Ingresso principale",
+             codice="VDC/2024/001", stato="buono", responsabile="moretti",
+             lat=40.41625, lon=15.20145,
+             dati={"marca": "Hikvision DS-2CD2143G2-I", "risoluzione": "4 MP", "campo_visivo": "120°",
+                   "registrazione": "NVR locale – retention 30 gg",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-30), "note": ""}),
+        dict(id="VDC-002", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="Telecamera – Piazza Municipio lato nord", ubicazione="Piazza Municipio – palo lampione",
+             codice="VDC/2024/002", stato="buono", responsabile="moretti",
+             lat=40.41635, lon=15.20155,
+             dati={"marca": "Hikvision DS-2CD2T43G2-4I", "risoluzione": "4 MP", "campo_visivo": "90°",
+                   "registrazione": "NVR locale – retention 30 gg",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-30), "note": "Copre accesso da Via Garibaldi."}),
+        dict(id="VDC-003", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="Telecamera – Via Nazionale incrocio SP 11", ubicazione="Via Nazionale – incrocio SP 11",
+             codice="VDC/2024/003", stato="buono", responsabile="moretti",
+             lat=_VIA[0], lon=_VIA[1],
+             dati={"marca": "Axis P3245-V", "risoluzione": "2 MP", "campo_visivo": "110°",
+                   "registrazione": "NVR locale – retention 30 gg",
+                   "annoAcquisizione": 2021, "ultimaVerifica": day_from(-60), "note": "Installata in seguito all'intervento di messa in sicurezza incrocio SP 11."}),
+        dict(id="VDC-004", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="Telecamera – Villa Comunale ingresso", ubicazione="Villa Comunale – cancello ingresso",
+             codice="VDC/2024/004", stato="discreto", responsabile="moretti",
+             lat=_VIL[0], lon=_VIL[1],
+             dati={"marca": "Dahua IPC-HDW2849H-S-IL", "risoluzione": "8 MP", "campo_visivo": "102°",
+                   "registrazione": "NVR locale – retention 30 gg",
+                   "annoAcquisizione": 2020, "ultimaVerifica": day_from(-120),
+                   "note": "Immagine notturna degradata. Pulizia lente necessaria."}),
+        dict(id="VDC-005", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="Telecamera – Centro Sociale Anziani esterno", ubicazione="Via Cavour, 8 – facciata",
+             codice="VDC/2024/005", stato="buono", responsabile="moretti",
+             lat=_CSA[0], lon=_CSA[1],
+             dati={"marca": "Hikvision DS-2CD2143G2-I", "risoluzione": "4 MP", "campo_visivo": "120°",
+                   "registrazione": "NVR locale – retention 30 gg",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-45), "note": ""}),
+        dict(id="VDC-006", tipo="infrastruttura", categoria="videosorveglianza",
+             denominazione="NVR centrale videosorveglianza", ubicazione="Municipio – Sala server",
+             codice="VDC/2024/006", stato="buono", responsabile="moretti",
+             lat=_MUN[0], lon=_MUN[1],
+             dati={"marca": "Hikvision DS-7616NXI-K2/16P", "capacita": "16 canali, 8 TB",
+                   "registrazione": "Retention 30 gg per tutti i canali",
+                   "annoAcquisizione": 2022, "ultimaVerifica": day_from(-30),
+                   "note": "UPS dedicato. Gestisce VDC-001..VDC-005. Backup configurazione effettuato."}),
+    ]
+    esistenti = {b.id for b in db.query(models.Bene.id).all()}
+    aggiunti = False
+    for b in nuovi:
+        if b["id"] in esistenti:
+            continue
+        db.add(models.Bene(**b))
+        aggiunti = True
+    if aggiunti:
+        db.commit()
+
+
 def init_db():
     from sqlalchemy import text
     if engine.dialect.name == "postgresql":
@@ -307,6 +453,8 @@ def init_db():
             seed(db)
         # Integra le pratiche demo dei nuovi uffici (idempotente).
         seed_extra_uffici(db)
+        # Integra PC, stampanti e videosorveglianza (idempotente).
+        seed_beni_informatica(db)
         from . import search
         if db.query(models.Indice).count() == 0:
             search.reindex(db)
