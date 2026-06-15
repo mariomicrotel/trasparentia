@@ -113,6 +113,16 @@ export const api = {
   leggiImpostazioni: (me) => req("GET", "/api/configurazione/impostazioni", null, me),
   salvaImpostazioni: (payload, me) => req("POST", "/api/configurazione/impostazioni", payload, me),
 
+  // stemma / logo ente
+  uploadStemma: (file, me) => {
+    const fd = new FormData(); fd.append("file", file);
+    return fetch("/api/configurazione/stemma", {
+      method: "POST", body: fd,
+      headers: me ? { "X-Role": me } : {},
+    }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(new Error(e.detail || "Upload fallito"))));
+  },
+  stemmaUrl: () => `/api/configurazione/stemma?t=${Date.now()}`,
+
   // backup & restore (Fase 7 + Bundle D)
   listBackup: (me) => req("GET", "/api/backup", null, me),
   creaBackup: (me) => req("POST", "/api/backup", null, me),

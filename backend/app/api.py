@@ -984,6 +984,41 @@ def post_impostazioni(payload: dict = Body(...), me: str = Depends(auth_user), d
     return configurazione_cfg.salva(db, payload)
 
 
+_STEMMA_KEY = "stemma/stemma"
+_STEMMA_CT_KEY = "STEMMA_CT"
+
+
+@router.post("/configurazione/stemma")
+async def upload_stemma(file: UploadFile = File(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    data = await file.read()
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(413, "File troppo grande (max 2 MB)")
+    ct = file.content_type or "image/png"
+    if not ct.startswith("image/"):
+        raise HTTPException(400, "Solo file immagine (PNG, SVG, JPEG)")
+    if not storage.put(_STEMMA_KEY, data, ct):
+        raise HTTPException(503, "Storage non disponibile")
+    oggi = date.today().isoformat()
+    row = db.query(models.ImpostazioneConfig).filter(models.ImpostazioneConfig.chiave == _STEMMA_CT_KEY).first()
+    if row:
+        row.valore = ct; row.modificata = oggi
+    else:
+        db.add(models.ImpostazioneConfig(chiave=_STEMMA_CT_KEY, valore=ct, modificata=oggi))
+    db.commit()
+    return {"ok": True, "content_type": ct}
+
+
+@router.get("/configurazione/stemma")
+def get_stemma(db: Session = Depends(get_db)):
+    data = storage.get(_STEMMA_KEY)
+    if data is None:
+        raise HTTPException(404, "Nessuno stemma caricato")
+    row = db.query(models.ImpostazioneConfig).filter(models.ImpostazioneConfig.chiave == _STEMMA_CT_KEY).first()
+    ct = row.valore if row else "image/png"
+    return Response(content=data, media_type=ct)
+
+
 # ---------- importazione massiva (Fase 8) ----------
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB per file
 

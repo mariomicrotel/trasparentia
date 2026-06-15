@@ -20,6 +20,21 @@ import Utenti from "./views/Utenti.jsx";
 import Calibrazione from "./views/Calibrazione.jsx";
 import Uffici from "./views/Uffici.jsx";
 
+function SlimbarCrest({ tick }) {
+  const [err, setErr] = useState(false);
+  useEffect(() => { setErr(false); }, [tick]);
+  if (err) return <span className="slimbar__crest" />;
+  return (
+    <img
+      src={`/api/configurazione/stemma?t=${tick}`}
+      alt=""
+      className="slimbar__crest"
+      style={{ objectFit: "contain" }}
+      onError={() => setErr(true)}
+    />
+  );
+}
+
 function Stub({ title, icon, nav }) {
   return (
     <div className="page">
@@ -61,7 +76,10 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
-    api.meta().then((m) => { setMeta(m); setM(m); setReady(true); }).catch(() => setReady(true));
+    api.meta().then((m) => {
+      setMeta(m); setM(m); setReady(true);
+      if (m?.tema?.blu) document.documentElement.style.setProperty("--blu", m.tema.blu);
+    }).catch(() => setReady(true));
     if (kcEnabled) {
       api.getMe().then((u) => setKcUser(u)).catch(() => {});
     }
@@ -143,7 +161,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
   return (
     <div className="app" data-tema="blu" data-density="comoda">
       <div className="slimbar">
-        <span className="slimbar__crest" />
+        <SlimbarCrest tick={tick} />
         <span><strong>{ENTE.nome}</strong>{` · Provincia di ${ENTE.prov}`}</span>
         <span className="slimbar__spacer" />
         <span className="slimbar__chip">{kcEnabled ? "AUTENTICAZIONE KEYCLOAK" : "AMBIENTE DIMOSTRATIVO"}</span>

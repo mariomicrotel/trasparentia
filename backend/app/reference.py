@@ -7,27 +7,38 @@ from .config import settings
 # ---- Ente -------------------------------------------------------------
 ENTE = {
     "nome": settings.ENTE_NOME,
-    "prov": "SA",
-    "cap": "84069",
-    "abitanti": 7180,
-    "pec": "protocollo@pec.comune.roccadaspide.sa.it",
+    "prov": settings.ENTE_PROV,
+    "cap": settings.ENTE_CAP,
+    "abitanti": settings.ENTE_ABITANTI,
+    "pec": settings.ENTE_PEC,
 }
 
 # ---- Utenti / ruoli ---------------------------------------------------
+# Stato iniziale — sync_memory() sovrascrive con i valori live dal DB
 USERS = {
-    "rossi": {"id": "rossi", "nome": "Maria Rossi", "ruolo": "Operatore protocollo", "ufficio": "Segreteria / Protocollo", "iniz": "MR", "col": "#0066cc", "email": "m.rossi@comune.roccadaspide.sa.it"},
-    "esposito": {"id": "esposito", "nome": "Geom. Luigi Esposito", "ruolo": "Responsabile Ufficio Tecnico", "ufficio": "Ufficio Tecnico", "iniz": "LE", "col": "#0b7d99", "email": "l.esposito@comune.roccadaspide.sa.it"},
-    "bianchi": {"id": "bianchi", "nome": "Dott.ssa Anna Bianchi", "ruolo": "Segretario Comunale", "ufficio": "Segreteria Generale", "iniz": "AB", "col": "#6a4ec2", "email": "a.bianchi@comune.roccadaspide.sa.it"},
-    "deluca": {"id": "deluca", "nome": "Geom. Sara De Luca", "ruolo": "Istruttore tecnico", "ufficio": "Ufficio Tecnico", "iniz": "SD", "col": "#1a7a45", "email": "s.deluca@comune.roccadaspide.sa.it"},
-    "ai": {"id": "ai", "nome": "TrasParentIA", "ruolo": "Assistente AI", "ufficio": "", "iniz": "AI", "col": "#1455a6", "email": ""},
+    "rossi":    {"id": "rossi",    "nome": "Maria Rossi",           "ruolo": "Operatore Protocollo",       "ufficio": "Segreteria / Protocollo",  "iniz": "MR", "col": "#0066cc", "email": "m.rossi@comune.roccadaspide.sa.it"},
+    "esposito": {"id": "esposito", "nome": "Geom. Luigi Esposito",  "ruolo": "Responsabile Ufficio Tecnico","ufficio": "Ufficio Tecnico",          "iniz": "LE", "col": "#0b7d99", "email": "l.esposito@comune.roccadaspide.sa.it"},
+    "bianchi":  {"id": "bianchi",  "nome": "Dott.ssa Anna Bianchi", "ruolo": "Segretario Comunale",        "ufficio": "Segreteria Generale",      "iniz": "AB", "col": "#6a4ec2", "email": "a.bianchi@comune.roccadaspide.sa.it"},
+    "deluca":   {"id": "deluca",   "nome": "Geom. Sara De Luca",    "ruolo": "Istruttore",                 "ufficio": "Ufficio Tecnico",          "iniz": "SD", "col": "#1a7a45", "email": "s.deluca@comune.roccadaspide.sa.it"},
+    "ferrari":  {"id": "ferrari",  "nome": "Marco Ferrari",         "ruolo": "Istruttore",                 "ufficio": "Ufficio Tecnico",          "iniz": "MF", "col": "#0b5e8a", "email": "m.ferrari@comune.roccadaspide.sa.it"},
+    "ferrara":  {"id": "ferrara",  "nome": "Rag. Carla Ferrara",    "ruolo": "Responsabile di Ufficio",    "ufficio": "Ragioneria / Tributi",     "iniz": "CF", "col": "#7a4ec2", "email": "c.ferrara@comune.roccadaspide.sa.it"},
+    "russo":    {"id": "russo",    "nome": "Dott. Marco Russo",     "ruolo": "Responsabile di Ufficio",    "ufficio": "Anagrafe e Stato Civile",  "iniz": "MR", "col": "#0b6ea6", "email": "m.russo@comune.roccadaspide.sa.it"},
+    "moretti":  {"id": "moretti",  "nome": "Comm. Anna Moretti",    "ruolo": "Responsabile di Ufficio",    "ufficio": "Polizia Locale",           "iniz": "AM", "col": "#c2452f", "email": "a.moretti@comune.roccadaspide.sa.it"},
+    "ricci":    {"id": "ricci",    "nome": "A.S. Lucia Ricci",      "ruolo": "Responsabile di Ufficio",    "ufficio": "Servizi Sociali",          "iniz": "LR", "col": "#1a7a55", "email": "l.ricci@comune.roccadaspide.sa.it"},
+    "ai":       {"id": "ai",       "nome": "TrasParentIA",          "ruolo": "Assistente AI",              "ufficio": "",                         "iniz": "AI", "col": "#1455a6", "email": ""},
 }
 
-# RBAC — permessi per ruolo
+# RBAC — permessi per utente (derivati da KC_ROLE_PERM; sync_memory() li ricarica dal DB)
 PERM = {
-    "rossi": {"classifica": True, "prendiCarico": True, "assegna": True, "lavora": False, "bozze": False, "supervisione": False},
-    "esposito": {"classifica": True, "prendiCarico": True, "assegna": True, "lavora": True, "bozze": True, "supervisione": False},
-    "bianchi": {"classifica": False, "prendiCarico": False, "assegna": True, "lavora": False, "bozze": False, "supervisione": True},
-    "deluca": {"classifica": False, "prendiCarico": True, "assegna": False, "lavora": True, "bozze": True, "supervisione": False},
+    "rossi":    {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": False, "bozze": False, "supervisione": False},
+    "esposito": {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": True,  "bozze": True,  "supervisione": False},
+    "bianchi":  {"classifica": False, "prendiCarico": False, "assegna": True,  "lavora": False, "bozze": False, "supervisione": True},
+    "deluca":   {"classifica": False, "prendiCarico": True,  "assegna": False, "lavora": True,  "bozze": True,  "supervisione": False},
+    "ferrari":  {"classifica": False, "prendiCarico": True,  "assegna": False, "lavora": True,  "bozze": True,  "supervisione": False},
+    "ferrara":  {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": True,  "bozze": True,  "supervisione": False},
+    "russo":    {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": True,  "bozze": True,  "supervisione": False},
+    "moretti":  {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": True,  "bozze": True,  "supervisione": False},
+    "ricci":    {"classifica": True,  "prendiCarico": True,  "assegna": True,  "lavora": True,  "bozze": True,  "supervisione": False},
 }
 
 # ---- Categorie documentali (§8.2) — 16 categorie ----------------------
@@ -240,7 +251,15 @@ def day_from(n: int) -> str:
 
 def meta_dict() -> dict:
     return {
-        "ente": ENTE, "users": USERS, "perm": PERM, "cat": CAT, "stati": STATI,
+        "ente": {
+            "nome": settings.ENTE_NOME,
+            "prov": settings.ENTE_PROV,
+            "cap": settings.ENTE_CAP,
+            "abitanti": settings.ENTE_ABITANTI,
+            "pec": settings.ENTE_PEC,
+        },
+        "tema": {"blu": settings.TEMA_BLU},
+        "users": USERS, "perm": PERM, "cat": CAT, "stati": STATI,
         "flow": FLOW, "prio": PRIO, "atti_tipi": ATTI_TIPI, "atti_stati": ATTI_STATI,
         "uffici": UFFICI, "catUfficio": CAT_UFFICIO,
     }

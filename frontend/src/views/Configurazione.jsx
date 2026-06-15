@@ -293,7 +293,245 @@ function ChecklistAvvio({ servizi, nav }) {
   );
 }
 
-export default function Configurazione({ M, me, toast, tick, nav }) {
+// ── Stemma helper ─────────────────────────────────────────────────────────────
+function StemmaImg({ ts }) {
+  const [err, setErr] = useState(false);
+  if (err) return <Icon name="image" size={24} stroke={1.5} style={{ color: "var(--text-muted)" }} />;
+  return (
+    <img
+      src={`/api/configurazione/stemma?t=${ts}`}
+      alt="Stemma ente"
+      style={{ width: "100%", height: "100%", objectFit: "contain" }}
+      onError={() => setErr(true)}
+    />
+  );
+}
+
+const COLORI_PRESET = [
+  { hex: "#0066cc", nome: "Blu PA" },
+  { hex: "#1a3668", nome: "Blu scuro" },
+  { hex: "#0b7d99", nome: "Ciano" },
+  { hex: "#1a7a45", nome: "Verde" },
+  { hex: "#5c3a8c", nome: "Viola" },
+  { hex: "#c2610c", nome: "Arancio" },
+  { hex: "#a62c2c", nome: "Rosso" },
+  { hex: "#333f4f", nome: "Antracite" },
+];
+
+// ── Look & Feel card ───────────────────────────────────────────────────────────
+function LookFeelCard({ campi, canAdmin, onSalva, saving, me, toast, refresh }) {
+  const [form, setForm] = useState({});
+  const [editing, setEditing] = useState(false);
+  const [origColor, setOrigColor] = useState("");
+  const [stemmaFile, setStemmaFile] = useState(null);
+  const [stemmaPreview, setStemmaPreview] = useState(null);
+  const [stemmaSaving, setStemmaSaving] = useState(false);
+  const [stemmaTs, setStemmaTs] = useState(() => Date.now());
+
+  function startEdit() {
+    const init = {};
+    (campi || []).forEach(c => { init[c.key] = c.valore ?? ""; });
+    setForm(init);
+    setOrigColor(document.documentElement.style.getPropertyValue("--blu") || "#0066cc");
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    if (origColor) document.documentElement.style.setProperty("--blu", origColor);
+    setEditing(false);
+  }
+
+  function setField(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  function onColorChange(hex) {
+    setField("TEMA_BLU", hex);
+    document.documentElement.style.setProperty("--blu", hex);
+  }
+
+  function onFileChange(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setStemmaFile(f);
+    setStemmaPreview(URL.createObjectURL(f));
+  }
+
+  async function salvaStemma() {
+    if (!stemmaFile) return;
+    setStemmaSaving(true);
+    try {
+      await api.uploadStemma(stemmaFile, me);
+      toast("Stemma caricato con successo", "success");
+      setStemmaTs(Date.now());
+      setStemmaFile(null);
+      if (stemmaPreview) { URL.revokeObjectURL(stemmaPreview); setStemmaPreview(null); }
+      if (refresh) refresh();
+    } catch (e) {
+      toast(e.message || "Upload fallito", "");
+    } finally {
+      setStemmaSaving(false);
+    }
+  }
+
+  const enteCampi = (campi || []).filter(c => c.key !== "TEMA_BLU");
+  const curColorSaved = (campi || []).find(c => c.key === "TEMA_BLU")?.valore || "#0066cc";
+  const curColor = editing ? (form.TEMA_BLU || "#0066cc") : curColorSaved;
+
+  return (
+    <div className="card" style={{ marginTop: 16, borderLeft: "4px solid var(--blu)" }}>
+      <div className="card__head">
+        <Icon name="palette" size={18} stroke={2} style={{ color: "var(--blu)" }} />
+        <h3 style={{ flex: 1 }}>Look & Feel — Identità dell'ente</h3>
+        {!editing && canAdmin && (
+          <button className="btn btn--subtle btn--sm" onClick={startEdit}>
+            <Icon name="edit" size={14} stroke={2} />Modifica
+          </button>
+        )}
+      </div>
+      <div className="card__body">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
+
+          {/* colonna sinistra: dati ente */}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 11.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+              Dati dell'ente
+            </div>
+            {!editing ? (
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "5px 14px", fontSize: 13 }}>
+                {enteCampi.map(c => (
+                  <React.Fragment key={c.key}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{c.label}</span>
+                    <span style={{ fontWeight: 600 }}>{c.valore || <em style={{ color: "var(--text-muted)", fontWeight: 400 }}>—</em>}</span>
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {enteCampi.map(c => (
+                  <div key={c.key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>{c.label}</label>
+                    <input
+                      type={c.tipo === "number" ? "number" : "text"}
+                      value={form[c.key] ?? ""}
+                      onChange={e => setField(c.key, e.target.value)}
+                      style={{ padding: "7px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--surface)", color: "var(--text)" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* colonna destra: colore + stemma */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+            {/* colore tema */}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 11.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+                Colore primario
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                {COLORI_PRESET.map(({ hex, nome }) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    disabled={!editing}
+                    onClick={() => editing && onColorChange(hex)}
+                    title={nome}
+                    style={{
+                      width: 28, height: 28, borderRadius: "50%", background: hex,
+                      border: "none", cursor: editing ? "pointer" : "default",
+                      outline: curColor.toLowerCase() === hex ? "3px solid var(--text)" : "2px solid transparent",
+                      outlineOffset: 2, flexShrink: 0,
+                    }}
+                  />
+                ))}
+              </div>
+              {editing ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="color"
+                    value={form.TEMA_BLU || "#0066cc"}
+                    onChange={e => onColorChange(e.target.value)}
+                    style={{ width: 34, height: 28, border: "1px solid var(--border)", borderRadius: 4, padding: 2, cursor: "pointer" }}
+                    title="Colore personalizzato"
+                  />
+                  <input
+                    type="text"
+                    value={form.TEMA_BLU || "#0066cc"}
+                    onChange={e => /^#[0-9a-fA-F]{0,6}$/.test(e.target.value) && onColorChange(e.target.value)}
+                    style={{ width: 88, padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, fontFamily: "monospace", background: "var(--surface)", color: "var(--text)" }}
+                  />
+                  <div
+                    style={{ flex: 1, height: 28, borderRadius: 6, background: curColor, border: "1px solid rgba(0,0,0,.12)", minWidth: 40 }}
+                    title="Anteprima colore"
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: curColorSaved, border: "1px solid rgba(0,0,0,.15)", flexShrink: 0 }} />
+                  <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{curColorSaved}</span>
+                </div>
+              )}
+            </div>
+
+            {/* stemma / logo */}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 11.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+                Stemma / Logo ente
+              </div>
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 8, border: "1px solid var(--border)",
+                  background: "var(--surface-2)", overflow: "hidden",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}>
+                  {stemmaPreview
+                    ? <img src={stemmaPreview} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    : <StemmaImg ts={stemmaTs} />
+                  }
+                </div>
+                {canAdmin && (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>PNG, SVG o JPEG · max 2 MB</div>
+                    <input
+                      type="file"
+                      accept="image/png,image/svg+xml,image/jpeg"
+                      onChange={onFileChange}
+                      style={{ fontSize: 12 }}
+                    />
+                    {stemmaFile && (
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={salvaStemma}
+                        disabled={stemmaSaving}
+                        style={{ alignSelf: "flex-start" }}
+                      >
+                        <Icon name="upload" size={13} stroke={2} />
+                        {stemmaSaving ? "Caricamento…" : "Carica stemma"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {editing && (
+          <div style={{ display: "flex", gap: 8, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+            <button className="btn btn--primary btn--sm" onClick={() => onSalva(form, () => setEditing(false))} disabled={saving}>
+              <Icon name="save" size={14} stroke={2} />{saving ? "Salvataggio…" : "Salva dati ente"}
+            </button>
+            <button className="btn btn--subtle btn--sm" onClick={cancelEdit} disabled={saving}>Annulla</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main view ──────────────────────────────────────────────────────────────────
+export default function Configurazione({ M, me, toast, tick, nav, refresh }) {
   const [data, setData] = useState(null);
   const [campiPerServizio, setCampiPerServizio] = useState({});
   const [testing, setTesting] = useState("");
@@ -797,6 +1035,18 @@ export default function Configurazione({ M, me, toast, tick, nav }) {
           </div>
         );
       })()}
+
+      {canAdmin && (
+        <LookFeelCard
+          campi={campiPerServizio["lookfeel"] || []}
+          canAdmin={canAdmin}
+          onSalva={(form, done) => salvaServizio("lookfeel", form, done)}
+          saving={saving === "lookfeel"}
+          me={me}
+          toast={toast}
+          refresh={refresh}
+        />
+      )}
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card__body">

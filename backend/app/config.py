@@ -36,8 +36,13 @@ class Settings:
     # Ricerca semantica: dimensione embedding (nomic-embed-text=768, bge-m3=1024)
     EMBED_DIM: int = int(os.getenv("EMBED_DIM", "768"))
 
-    # Ente di riferimento per il seed (personalizzabile)
+    # Ente di riferimento (personalizzabile da Configurazione → Look & Feel)
     ENTE_NOME: str = os.getenv("ENTE_NOME", "Comune di Roccadaspide")
+    ENTE_PROV: str = os.getenv("ENTE_PROV", "SA")
+    ENTE_CAP: str = os.getenv("ENTE_CAP", "84069")
+    ENTE_ABITANTI: int = int(os.getenv("ENTE_ABITANTI", "7180"))
+    ENTE_PEC: str = os.getenv("ENTE_PEC", "protocollo@pec.comune.roccadaspide.sa.it")
+    TEMA_BLU: str = os.getenv("TEMA_BLU", "#0066cc")
 
     # Autenticazione Keycloak (Fase 7). Default: disabilitata (usa X-Role per demo).
     KC_AUTH_ENABLED: bool = os.getenv("KC_AUTH_ENABLED", "false").lower() == "true"

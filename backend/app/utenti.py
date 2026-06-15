@@ -51,6 +51,7 @@ SEED = [
     ("esposito", "Geom. Luigi Esposito",   "l.esposito@comune.it", "Ufficio Tecnico",          "responsabile_ut",      "#0b7d99"),
     ("bianchi",  "Dott.ssa Anna Bianchi",  "a.bianchi@comune.it",  "Segreteria Generale",      "segretario",           "#6a4ec2"),
     ("deluca",   "Geom. Sara De Luca",     "s.deluca@comune.it",   "Ufficio Tecnico",          "istruttore",           "#1a7a45"),
+    ("ferrari",  "Marco Ferrari",          "m.ferrari@comune.it",  "Ufficio Tecnico",          "istruttore",           "#0b5e8a"),
     ("ferrara",  "Rag. Carla Ferrara",     "c.ferrara@comune.it",  "Ragioneria / Tributi",     "responsabile_ufficio", "#7a4ec2"),
     ("russo",    "Dott. Marco Russo",      "m.russo@comune.it",    "Anagrafe e Stato Civile",  "responsabile_ufficio", "#0b6ea6"),
     ("moretti",  "Comm. Anna Moretti",     "a.moretti@comune.it",  "Polizia Locale",           "responsabile_ufficio", "#c2452f"),

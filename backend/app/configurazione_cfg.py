@@ -31,6 +31,13 @@ SCHEMA: dict[str, tuple] = {
     "KC_INTERNAL_URL":         ("keycloak", "URL Keycloak (interno Docker)",        "url",      True),
     "KC_REALM":                ("keycloak", "Realm",                                "text",     True),
     "KC_CLIENT_ID":            ("keycloak", "Client ID",                            "text",     True),
+
+    "ENTE_NOME":               ("lookfeel", "Nome dell'ente",                       "text",     False),
+    "ENTE_PROV":               ("lookfeel", "Provincia (sigla 2 caratteri)",        "text",     False),
+    "ENTE_CAP":                ("lookfeel", "CAP",                                  "text",     False),
+    "ENTE_ABITANTI":           ("lookfeel", "Numero di abitanti",                   "number",   False),
+    "ENTE_PEC":                ("lookfeel", "PEC istituzionale dell'ente",          "text",     False),
+    "TEMA_BLU":                ("lookfeel", "Colore primario (esadecimale #rrggbb)", "text",    False),
 }
 
 _SENSITIVE = {"AI_API_KEY", "PEC_PASSWORD", "SMTP_PASSWORD"}
