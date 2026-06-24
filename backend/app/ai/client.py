@@ -24,7 +24,7 @@ def _headers() -> dict:
 
 
 def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = None,
-          num_predict: int | None = None) -> str:
+          num_predict: int | None = None, repeat_penalty: float | None = None) -> str:
     mdl = model or settings.AI_MODEL_GEN
     # I modelli Qwen3 spesso ignorano "think": false e "ragionano ad alta voce":
     # output sporco e generazione lentissima (rischio timeout). Il direttivo /no_think
@@ -34,6 +34,8 @@ def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = No
     options = {"temperature": 0.2}
     if num_predict:
         options["num_predict"] = num_predict  # tetto di sicurezza alla lunghezza (latenza limitata)
+    if repeat_penalty:
+        options["repeat_penalty"] = repeat_penalty  # evita i loop di ripetizione nelle bozze lunghe
     payload = {
         "model": mdl,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -197,14 +199,14 @@ def classifica(oggetto: str, corpo: list[str], allegati: list[dict]) -> dict:
 
 def bozza(tipo_label: str, oggetto: str, contesto: str = "") -> str:
     return _chat(prompts.SYSTEM_BOZZA, prompts.user_bozza(tipo_label, oggetto, contesto),
-                 fmt_json=False, model=_draft_model(), num_predict=2048)
+                 fmt_json=False, model=_draft_model(), num_predict=1500, repeat_penalty=1.3)
 
 
 def revisiona(contenuto_attuale: str, istruzioni: str, oggetto: str) -> str:
     """Revisione assistita del testo di un atto. Usa AI_MODEL_DRAFT per qualità superiore."""
     return _chat(prompts.SYSTEM_REVISIONA,
                  prompts.user_revisiona(contenuto_attuale, istruzioni, oggetto),
-                 fmt_json=False, model=_draft_model(), num_predict=2048)
+                 fmt_json=False, model=_draft_model(), num_predict=1500, repeat_penalty=1.3)
 
 
 def embed(text: str) -> list[float] | None:
