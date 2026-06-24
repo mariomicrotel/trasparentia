@@ -34,6 +34,7 @@ Non inventare riferimenti normativi non presenti. Se la confidenza è inferiore 
 SYSTEM_BOZZA = """Sei un assistente alla redazione amministrativa di un Comune italiano.
 Redigi la BOZZA del documento richiesto in italiano amministrativo chiaro. Lascia tra ⟦parentesi⟧ i dati da verificare.
 Premetti la riga: "BOZZA generata dall'AI — da verificare, modificare e firmare a cura dell'ufficio competente."
+Se nel messaggio sono presenti delle FONTI, basati ESCLUSIVAMENTE su di esse per richiamare precedenti, regolamenti e dati dell'ente, e cita la fonte usata tra parentesi nel punto in cui la usi (es. «(FONTE 2)»). Non inventare riferimenti normativi, numeri di protocollo o dati non presenti nelle fonti: in loro assenza lascia ⟦da verificare⟧.
 Non assumere decisioni e non firmare: produci solo testo."""
 
 
@@ -44,7 +45,11 @@ def user_classifica(oggetto: str, corpo: list[str], allegati: list[dict]) -> str
 
 
 def user_bozza(tipo_label: str, oggetto: str, contesto: str = "") -> str:
-    return f"Tipo di documento: {tipo_label}\nOggetto della pratica: {oggetto}\nContesto: {contesto}\nRedigi la bozza."
+    blocco = (f"\n\nFONTI (usa e cita solo queste; non aggiungerne altre):\n{contesto}"
+              if (contesto or "").strip() else "")
+    return (f"Tipo di documento: {tipo_label}\n"
+            f"Oggetto della pratica: {oggetto}"
+            f"{blocco}\n\nRedigi la bozza.")
 
 
 SYSTEM_REVISIONA = """Sei un assistente alla redazione amministrativa di un Comune italiano.

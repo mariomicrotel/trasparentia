@@ -2,11 +2,14 @@
 errori: se il server/modello non è raggiungibile, solleva AIUnavailable e il
 chiamante può ricadere sulla proposta già presente (human-in-the-loop)."""
 import json
+import re
 import httpx
 
 from ..config import settings
 from ..reference import CAT
 from . import prompts
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class AIUnavailable(Exception):
@@ -20,14 +23,24 @@ def _headers() -> dict:
     return h
 
 
-def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = None) -> str:
+def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = None,
+          num_predict: int | None = None) -> str:
+    mdl = model or settings.AI_MODEL_GEN
+    # I modelli Qwen3 spesso ignorano "think": false e "ragionano ad alta voce":
+    # output sporco e generazione lentissima (rischio timeout). Il direttivo /no_think
+    # nel prompt è il modo affidabile per disattivare il reasoning su questi modelli.
+    if "qwen3" in mdl.lower():
+        system = (system or "") + "\n/no_think"
+    options = {"temperature": 0.2}
+    if num_predict:
+        options["num_predict"] = num_predict  # tetto di sicurezza alla lunghezza (latenza limitata)
     payload = {
-        "model": model or settings.AI_MODEL_GEN,
+        "model": mdl,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "stream": False,
-        "think": False,  # disabilita la modalità "thinking" dei modelli Qwen3 (latenza/JSON puliti)
+        "think": False,
         "keep_alive": "30m",
-        "options": {"temperature": 0.2},
+        "options": options,
     }
     if fmt_json:
         payload["format"] = "json"
@@ -36,7 +49,9 @@ def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = No
                        headers=_headers(), timeout=settings.AI_TIMEOUT,
                        verify=settings.AI_TLS_VERIFY)
         r.raise_for_status()
-        return r.json()["message"]["content"]
+        content = r.json()["message"]["content"]
+        # rimuove eventuali blocchi di reasoning residui (<think>…</think>) lasciati dal modello
+        return _THINK_RE.sub("", content).strip()
     except Exception as e:  # connessione, timeout, modello assente, ecc.
         raise AIUnavailable(str(e))
 
@@ -182,14 +197,14 @@ def classifica(oggetto: str, corpo: list[str], allegati: list[dict]) -> dict:
 
 def bozza(tipo_label: str, oggetto: str, contesto: str = "") -> str:
     return _chat(prompts.SYSTEM_BOZZA, prompts.user_bozza(tipo_label, oggetto, contesto),
-                 fmt_json=False, model=_draft_model())
+                 fmt_json=False, model=_draft_model(), num_predict=2048)
 
 
 def revisiona(contenuto_attuale: str, istruzioni: str, oggetto: str) -> str:
     """Revisione assistita del testo di un atto. Usa AI_MODEL_DRAFT per qualità superiore."""
     return _chat(prompts.SYSTEM_REVISIONA,
                  prompts.user_revisiona(contenuto_attuale, istruzioni, oggetto),
-                 fmt_json=False, model=_draft_model())
+                 fmt_json=False, model=_draft_model(), num_predict=2048)
 
 
 def embed(text: str) -> list[float] | None:
