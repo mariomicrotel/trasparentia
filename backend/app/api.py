@@ -537,8 +537,13 @@ def aggiungi_bozza(pid: str, payload: dict = Body(...), me: str = Depends(auth_u
     # contenuto: AI reale se richiesto, altrimenti placeholder
     contenuto = payload.get("testo", "")
     if payload.get("usaAI") and not contenuto:
+        # RAG: recupera dall'indice i passaggi pertinenti (regolamenti, atti, precedenti)
+        # per fondare la bozza ed evitare riferimenti inventati. Esclude la pratica stessa.
+        query = " ".join(filter(None, [lbl, p.oggetto, p.tipoProcedimento]))
+        fonti = search.blocco_fonti(search.contesto_per(db, query, k=4, escludi={f"pratica:{pid}"}))
+        ogg = f"{p.oggetto} (tipo procedimento: {p.tipoProcedimento})" if p.tipoProcedimento else p.oggetto
         try:
-            contenuto = ai.bozza(lbl, p.oggetto, p.tipoProcedimento)
+            contenuto = ai.bozza(lbl, ogg, fonti)
         except ai.AIUnavailable:
             contenuto = f"BOZZA generata dall'AI — da verificare.\n\n⟦Testo da completare per: {lbl} — {p.oggetto}⟧"
 
@@ -692,7 +697,9 @@ def rigenera_contenuto(aid: str, payload: dict = Body(...), me: str = Depends(au
             nuovo = ai.revisiona(contenuto_base, istruzioni, a.oggetto)
         else:
             tipo_lbl = (payload.get("tipo_lbl") or a.tipo)
-            nuovo = ai.bozza(tipo_lbl, a.oggetto)
+            # RAG: fonda la prima stesura sui passaggi pertinenti dell'indice (esclude l'atto stesso)
+            fonti = search.blocco_fonti(search.contesto_per(db, f"{tipo_lbl} {a.oggetto}", k=4, escludi={f"atto:{a.id}"}))
+            nuovo = ai.bozza(tipo_lbl, a.oggetto, fonti)
     except ai.AIUnavailable as e:
         raise HTTPException(503, f"Server AI non disponibile: {e}")
     return {"contenuto_nuovo": nuovo, "modello": settings.AI_MODEL_DRAFT or settings.AI_MODEL_GEN}
@@ -737,6 +744,87 @@ def bene_qr(bid: str, db: Session = Depends(get_db)):
     buf = io.BytesIO()
     segno.make(f"TRASPARENTIA|{b.id}|{b.codice}", error="m").save(buf, kind="png", scale=5, border=2, dark="#17324d")
     return Response(content=buf.getvalue(), media_type="image/png")
+
+
+_BENI_STATI_TUTTI = {"ottimo", "buono", "discreto", "scarso", "critico"}
+
+
+def _float_or_none(v):
+    try:
+        return float(v) if v not in (None, "", "null") else None
+    except (ValueError, TypeError):
+        return None
+
+
+@router.post("/beni", status_code=201)
+def crea_bene(payload: dict, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    denominazione = (payload.get("denominazione") or "").strip()
+    tipo = (payload.get("tipo") or "").strip()
+    categoria = (payload.get("categoria") or "").strip()
+    if not denominazione or not tipo or not categoria:
+        raise HTTPException(400, "tipo, categoria e denominazione sono obbligatori")
+    stato = (payload.get("stato") or "buono").strip()
+    if stato not in _BENI_STATI_TUTTI:
+        stato = "buono"
+    dati = payload.get("dati") or {}
+    b = models.Bene(
+        id=str(uuid.uuid4()),
+        tipo=tipo,
+        categoria=categoria,
+        denominazione=denominazione,
+        ubicazione=(payload.get("ubicazione") or "").strip(),
+        codice=(payload.get("codice") or "").strip(),
+        stato=stato,
+        responsabile=payload.get("responsabile") or None,
+        lat=_float_or_none(payload.get("lat")),
+        lon=_float_or_none(payload.get("lon")),
+        dati=dati if isinstance(dati, dict) else {},
+    )
+    db.add(b)
+    db.commit()
+    return b.dict()
+
+
+@router.put("/beni/{bid}")
+def aggiorna_bene(bid: str, payload: dict, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    b = db.get(models.Bene, bid)
+    if not b:
+        raise HTTPException(404, "Bene non trovato")
+    if "denominazione" in payload:
+        b.denominazione = (payload["denominazione"] or "").strip()
+    if "tipo" in payload:
+        b.tipo = (payload["tipo"] or "").strip()
+    if "categoria" in payload:
+        b.categoria = (payload["categoria"] or "").strip()
+    if "ubicazione" in payload:
+        b.ubicazione = (payload["ubicazione"] or "").strip()
+    if "codice" in payload:
+        b.codice = (payload["codice"] or "").strip()
+    if "stato" in payload:
+        s = (payload["stato"] or "buono").strip()
+        b.stato = s if s in _BENI_STATI_TUTTI else "buono"
+    if "responsabile" in payload:
+        b.responsabile = payload["responsabile"] or None
+    if "lat" in payload:
+        b.lat = _float_or_none(payload["lat"])
+    if "lon" in payload:
+        b.lon = _float_or_none(payload["lon"])
+    if "dati" in payload and isinstance(payload["dati"], dict):
+        b.dati = payload["dati"]
+    db.commit()
+    return b.dict()
+
+
+@router.delete("/beni/{bid}", status_code=204)
+def elimina_bene(bid: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    b = db.get(models.Bene, bid)
+    if not b:
+        raise HTTPException(404, "Bene non trovato")
+    db.delete(b)
+    db.commit()
 
 
 # ---------- sicurezza & log ----------

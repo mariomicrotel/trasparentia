@@ -49,6 +49,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL_GEN: ${AI_MODEL_GEN:-qwen2.5:7b-instruct}
+      AI_MODEL_DRAFT: ${AI_MODEL_DRAFT:-}
       AI_MODEL_EMBED: ${AI_MODEL_EMBED:-nomic-embed-text}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-trasparentia}

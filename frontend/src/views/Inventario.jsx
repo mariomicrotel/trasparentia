@@ -8,15 +8,17 @@ import { Badge, fmtDate } from "../ui.jsx";
 const STATO_TONE = { ottimo: "verde", buono: "verde", discreto: "blu", scarso: "ambra", critico: "rosso" };
 const STATO_COLOR = { ottimo: "#1a7a45", buono: "#1a7a45", discreto: "#0066cc", scarso: "#a66300", critico: "#d9364f" };
 const TIPO_ICO = { immobile: "building", mobile: "box", infrastruttura: "route" };
+const TIPI = ["immobile", "mobile", "infrastruttura"];
+const STATI = ["ottimo", "buono", "discreto", "scarso", "critico"];
+
 function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef({});
-  const [geoTip, setGeoTip] = useState(null); // {id, nome} del bene in attesa di pin
+  const [geoTip, setGeoTip] = useState(null);
 
-  // Inizializzazione mappa
   useEffect(() => {
-    if (mapRef.current && leafletRef.current) return; // già inizializzata
+    if (mapRef.current && leafletRef.current) return;
 
     const center = list.find((b) => b.lat && b.lon) || {};
     const map = L.map("inventario-map", { zoomControl: true }).setView(
@@ -28,7 +30,6 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
     }).addTo(map);
     leafletRef.current = map;
 
-    // Clic sulla mappa per posizionare un bene (solo admin + geoTip attivo)
     map.on("click", (e) => {
       setGeoTip((tip) => {
         if (!tip) return null;
@@ -43,12 +44,10 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
     return () => { map.remove(); leafletRef.current = null; };
   }, []);
 
-  // Aggiorna marker al cambio della lista
   useEffect(() => {
     const map = leafletRef.current;
     if (!map) return;
 
-    // Rimuovi marker orfani
     Object.keys(markersRef.current).forEach((id) => {
       if (!list.find((b) => b.id === id)) {
         map.removeLayer(markersRef.current[id]);
@@ -74,7 +73,6 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
     });
   }, [list]);
 
-  // Evidenzia il marker del bene selezionato
   useEffect(() => {
     const map = leafletRef.current;
     if (!map || !sel) return;
@@ -120,14 +118,158 @@ function BeniMappa({ list, sel, onSelect, canAdmin, me, onGeoSaved }) {
   );
 }
 
+function BeneForm({ bene, M, me, onSave, onClose }) {
+  const isNew = !bene?.id;
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    tipo: bene?.tipo || "immobile",
+    categoria: bene?.categoria || "",
+    denominazione: bene?.denominazione || "",
+    ubicazione: bene?.ubicazione || "",
+    codice: bene?.codice || "",
+    stato: bene?.stato || "buono",
+    responsabile: bene?.responsabile || "",
+    dati: {
+      valoreContabile: bene?.dati?.valoreContabile ?? "",
+      annoAcquisizione: bene?.dati?.annoAcquisizione ?? "",
+      targa: bene?.dati?.targa ?? "",
+      foglio: bene?.dati?.foglio ?? "",
+      particella: bene?.dati?.particella ?? "",
+      ultimaVerifica: bene?.dati?.ultimaVerifica ?? "",
+      scadenzaCollaudo: bene?.dati?.scadenzaCollaudo ?? "",
+      note: bene?.dati?.note ?? "",
+    },
+  });
+
+  function set(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+  function setDati(k, v) { setForm((f) => ({ ...f, dati: { ...f.dati, [k]: v } })); }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.denominazione.trim() || !form.tipo || !form.categoria.trim()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        responsabile: form.responsabile || null,
+        dati: {
+          ...form.dati,
+          valoreContabile: form.dati.valoreContabile !== "" ? Number(form.dati.valoreContabile) : null,
+        },
+      };
+      Object.keys(payload.dati).forEach((k) => {
+        if (payload.dati[k] === "" || payload.dati[k] === null) delete payload.dati[k];
+      });
+      let saved;
+      if (isNew) {
+        saved = await api.creaBene(payload, me);
+      } else {
+        saved = await api.aggiornaBene(bene.id, payload, me);
+      }
+      onSave(saved);
+    } catch (err) {
+      alert(err.message || "Errore durante il salvataggio");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const users = Object.entries(M.users || {}).filter(([id]) => id !== "ai");
+
+  const fld = (label, content) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</label>
+      {content}
+    </div>
+  );
+
+  const inp = (props) => (
+    <input className="inp" {...props} style={{ width: "100%", boxSizing: "border-box", ...props.style }} />
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px", background: "rgba(0,0,0,.45)", overflowY: "auto" }}
+         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "var(--surface)", borderRadius: 12, width: "100%", maxWidth: 660, boxShadow: "0 8px 32px #0004", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 24px 14px", borderBottom: "1px solid var(--border)" }}>
+          <Icon name={isNew ? "plus" : "edit"} size={18} stroke={2} style={{ color: "var(--blu)" }} />
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{isNew ? "Nuovo bene" : `Modifica — ${bene.denominazione}`}</h2>
+          <button className="iconbtn" style={{ marginLeft: "auto" }} onClick={onClose}><Icon name="x" size={18} /></button>
+        </div>
+
+        <form onSubmit={submit} style={{ padding: "20px 24px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {fld("Tipo *", (
+              <select className="inp" value={form.tipo} onChange={(e) => set("tipo", e.target.value)} required>
+                {TIPI.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              </select>
+            ))}
+            {fld("Categoria *", inp({ value: form.categoria, onChange: (e) => set("categoria", e.target.value), required: true, placeholder: "es. Edificio scolastico" }))}
+          </div>
+
+          {fld("Denominazione *", inp({ value: form.denominazione, onChange: (e) => set("denominazione", e.target.value), required: true, placeholder: "es. Scuola elementare G. Mazzini" }))}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {fld("Ubicazione", inp({ value: form.ubicazione, onChange: (e) => set("ubicazione", e.target.value), placeholder: "Via, numero civico" }))}
+            {fld("Codice inventariale", inp({ value: form.codice, onChange: (e) => set("codice", e.target.value), placeholder: "es. IMM/2024/001" }))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {fld("Stato", (
+              <select className="inp" value={form.stato} onChange={(e) => set("stato", e.target.value)}>
+                {STATI.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            ))}
+            {fld("Responsabile", (
+              <select className="inp" value={form.responsabile} onChange={(e) => set("responsabile", e.target.value)}>
+                <option value="">— nessuno —</option>
+                {users.map(([id, u]) => <option key={id} value={id}>{u.nome}</option>)}
+              </select>
+            ))}
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Dati aggiuntivi</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {fld("Valore contabile (€)", inp({ type: "number", min: 0, step: "0.01", value: form.dati.valoreContabile, onChange: (e) => setDati("valoreContabile", e.target.value), placeholder: "0.00" }))}
+              {fld("Anno acquisizione", inp({ value: form.dati.annoAcquisizione, onChange: (e) => setDati("annoAcquisizione", e.target.value), placeholder: "es. 2010" }))}
+              {form.tipo === "mobile" && fld("Targa", inp({ value: form.dati.targa, onChange: (e) => setDati("targa", e.target.value), placeholder: "es. AB123CD", style: { fontFamily: "monospace" } }))}
+              {form.tipo === "immobile" && fld("Foglio catastale", inp({ value: form.dati.foglio, onChange: (e) => setDati("foglio", e.target.value), placeholder: "es. 12" }))}
+              {form.tipo === "immobile" && fld("Particella", inp({ value: form.dati.particella, onChange: (e) => setDati("particella", e.target.value), placeholder: "es. 345" }))}
+              {fld("Ultima verifica", inp({ type: "date", value: form.dati.ultimaVerifica, onChange: (e) => setDati("ultimaVerifica", e.target.value) }))}
+              {fld("Scadenza collaudo", inp({ type: "date", value: form.dati.scadenzaCollaudo, onChange: (e) => setDati("scadenzaCollaudo", e.target.value) }))}
+            </div>
+          </div>
+
+          {fld("Note", (
+            <textarea className="inp" rows={3} value={form.dati.note} onChange={(e) => setDati("note", e.target.value)}
+              style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} placeholder="Informazioni aggiuntive…" />
+          ))}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", paddingTop: 4 }}>
+            <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>Annulla</button>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              <Icon name={saving ? "loader" : "save"} size={15} stroke={2} />
+              {saving ? "Salvataggio…" : isNew ? "Crea bene" : "Salva modifiche"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Inventario({ M, me, toast, tick, refresh }) {
   const [list, setList] = useState([]);
   const [sel, setSel] = useState(null);
   const [tipo, setTipo] = useState("tutti");
-  const [vista, setVista] = useState("lista"); // "lista" | "mappa"
+  const [vista, setVista] = useState("lista");
   const [importing, setImporting] = useState(false);
   const [esitoImport, setEsitoImport] = useState(null);
-  const leafletLoaded = true; // Leaflet è importato staticamente
+  const [formBene, setFormBene] = useState(null); // null=chiuso, {}=nuovo, bene=modifica
+  const [delId, setDelId] = useState(null); // id del bene da eliminare
+  const [deleting, setDeleting] = useState(false);
+  const leafletLoaded = true;
   const fileRef = useRef(null);
 
   const canAdmin = !!(M.perm?.[me]?.supervisione);
@@ -138,7 +280,6 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
   }).catch(() => setList([]));
 
   useEffect(() => { carica(); }, [tick]);
-
 
   async function onFile(e) {
     const file = e.target.files?.[0];
@@ -158,6 +299,37 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
     setList((prev) => prev.map((b) => b.id === updated.id ? updated : b));
     setSel((s) => (s && s.id === updated.id ? updated : s));
     toast("Coordinate salvate", "success");
+  }
+
+  function onFormSave(saved) {
+    const isNew = !list.find((b) => b.id === saved.id);
+    if (isNew) {
+      setList((prev) => [saved, ...prev]);
+    } else {
+      setList((prev) => prev.map((b) => b.id === saved.id ? saved : b));
+    }
+    setSel(saved);
+    setFormBene(null);
+    toast(isNew ? "Bene creato" : "Bene aggiornato", "success");
+    refresh && refresh();
+  }
+
+  async function onElimina() {
+    if (!delId) return;
+    setDeleting(true);
+    try {
+      await api.eliminaBene(delId, me);
+      const next = list.filter((b) => b.id !== delId);
+      setList(next);
+      setSel(next[0] || null);
+      setDelId(null);
+      toast("Bene eliminato", "success");
+      refresh && refresh();
+    } catch (err) {
+      toast(err.message || "Errore eliminazione", "");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const shown = tipo === "tutti" ? list : list.filter((b) => b.tipo === tipo);
@@ -193,8 +365,11 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
           {canAdmin && (
             <>
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
-              <button className="btn btn--primary" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <button className="btn btn--ghost" onClick={() => fileRef.current?.click()} disabled={importing}>
                 <Icon name="upload" size={15} stroke={2} />{importing ? "Importazione…" : "Importa CSV"}
+              </button>
+              <button className="btn btn--primary" onClick={() => setFormBene({})}>
+                <Icon name="plus" size={15} stroke={2.5} />Nuovo bene
               </button>
             </>
           )}
@@ -231,12 +406,19 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
             }
           </div>
           <div className="sidecol">
-            {sel && <SchedaBene sel={sel} M={M} />}
+            {sel && <SchedaBene sel={sel} M={M} canAdmin={canAdmin}
+              onModifica={() => setFormBene(sel)} onElimina={() => setDelId(sel.id)} />}
           </div>
         </div>
       ) : (
         <div className="split">
           <div className="card"><div className="card__body" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {shown.length === 0 && (
+              <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)" }}>
+                <Icon name="box" size={32} stroke={1.5} />
+                <p style={{ marginTop: 8 }}>Nessun bene in inventario.{canAdmin && " Usa «Nuovo bene» o importa un CSV."}</p>
+              </div>
+            )}
             {shown.map((b) => (
               <div key={b.id} role="button" tabIndex={0} onClick={() => setSel(b)} onKeyDown={(e) => e.key === "Enter" && setSel(b)}
                    data-active={sel && sel.id === b.id}
@@ -255,7 +437,36 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
             ))}
           </div></div>
           <div className="sidecol">
-            {sel && <SchedaBene sel={sel} M={M} />}
+            {sel && <SchedaBene sel={sel} M={M} canAdmin={canAdmin}
+              onModifica={() => setFormBene(sel)} onElimina={() => setDelId(sel.id)} />}
+          </div>
+        </div>
+      )}
+
+      {formBene !== null && (
+        <BeneForm bene={formBene?.id ? formBene : null} M={M} me={me}
+          onSave={onFormSave} onClose={() => setFormBene(null)} />
+      )}
+
+      {delId && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.45)" }}
+             onClick={(e) => { if (e.target === e.currentTarget && !deleting) setDelId(null); }}>
+          <div style={{ background: "var(--surface)", borderRadius: 12, padding: "28px 32px", maxWidth: 420, width: "90%", boxShadow: "0 8px 32px #0004" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+              <Icon name="alertCircle" size={22} stroke={2} style={{ color: "var(--rosso)", flexShrink: 0 }} />
+              <h3 style={{ margin: 0, fontSize: 16 }}>Elimina bene</h3>
+            </div>
+            <p style={{ margin: "0 0 20px", fontSize: 14, color: "var(--text-muted)" }}>
+              Sei sicuro di voler eliminare <b>{list.find((b) => b.id === delId)?.denominazione}</b>?<br />
+              L'operazione è irreversibile.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn--ghost" onClick={() => setDelId(null)} disabled={deleting}>Annulla</button>
+              <button className="btn btn--danger" onClick={onElimina} disabled={deleting}>
+                <Icon name={deleting ? "loader" : "trash"} size={15} stroke={2} />
+                {deleting ? "Eliminazione…" : "Elimina"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -263,10 +474,24 @@ export default function Inventario({ M, me, toast, tick, refresh }) {
   );
 }
 
-function SchedaBene({ sel, M }) {
+function SchedaBene({ sel, M, canAdmin, onModifica, onElimina }) {
   return (
     <div className="card">
-      <div className="card__head"><Icon name={TIPO_ICO[sel.tipo] || "box"} size={18} stroke={2} style={{ color: "var(--blu)" }} /><h3>Scheda bene</h3></div>
+      <div className="card__head">
+        <Icon name={TIPO_ICO[sel.tipo] || "box"} size={18} stroke={2} style={{ color: "var(--blu)" }} />
+        <h3>Scheda bene</h3>
+        {canAdmin && (
+          <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+            <button className="btn btn--ghost btn--sm" onClick={onModifica} title="Modifica">
+              <Icon name="edit" size={14} stroke={2} />Modifica
+            </button>
+            <button className="btn btn--ghost btn--sm" onClick={onElimina} title="Elimina"
+              style={{ color: "var(--rosso)" }}>
+              <Icon name="trash" size={14} stroke={2} />
+            </button>
+          </div>
+        )}
+      </div>
       <div className="card__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 700, color: "var(--blu-900)" }}>{sel.denominazione}</div>
