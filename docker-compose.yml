@@ -45,6 +45,9 @@ services:
     environment: &backend_env
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-trasparentia}:${POSTGRES_PASSWORD:-trasparentia}@db:5432/${POSTGRES_DB:-trasparentia}
       REDIS_URL: redis://redis:6379/0
+      # Produzione: PRODUCTION=true blocca l'avvio con config insicure e forza SKIP_SEED
+      PRODUCTION: ${PRODUCTION:-false}
+      SKIP_SEED: ${SKIP_SEED:-false}
       PEC_POLL_INTERVAL_MINUTES: ${PEC_POLL_INTERVAL_MINUTES:-10}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       AI_API_KEY: ${AI_API_KEY:-}

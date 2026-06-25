@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from .db import SessionLocal, engine, Base
 from . import models
 from .reference import day_from
+from .config import settings
 
 
 def _dt(days_ago: int, h: int, m: int = 0) -> str:
@@ -447,8 +448,14 @@ def init_db():
     db = SessionLocal()
     try:
         from . import utenti as utenti_module
+        # Gli utenti di piattaforma sono sempre necessari (fonte di verità per ruoli/permessi).
         utenti_module.seed(db)
         utenti_module.sync_memory(db)
+        if settings.SKIP_SEED:
+            # Produzione: nessun dato dimostrativo (comunicazioni, pratiche, beni fittizi).
+            import logging
+            logging.getLogger("trasparentia").info("SKIP_SEED attivo: dati dimostrativi non caricati.")
+            return
         if db.query(models.Comunicazione).count() == 0:
             seed(db)
         # Integra le pratiche demo dei nuovi uffici (idempotente).

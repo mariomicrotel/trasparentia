@@ -3,6 +3,13 @@ import os
 
 
 class Settings:
+    # Modalità di esercizio. In produzione l'avvio è bloccato (fail-fast) se restano
+    # configurazioni non sicure: auth disattivata, credenziali di default, API key AI vuota.
+    PRODUCTION: bool = os.getenv("PRODUCTION", "false").lower() == "true"
+    # Caricamento dei dati dimostrativi al primo avvio. In produzione va disattivato
+    # (forzato a True automaticamente quando PRODUCTION=true, vedi sotto).
+    SKIP_SEED: bool = os.getenv("SKIP_SEED", "false").lower() == "true"
+
     # Database: Postgres in Docker, SQLite per sviluppo/verifica rapida
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./trasparentia.db")
 
@@ -91,6 +98,10 @@ class Settings:
 
 
 settings = Settings()
+
+# In produzione i dati demo non vanno mai caricati.
+if settings.PRODUCTION:
+    settings.SKIP_SEED = True
 
 
 def apply_overrides(overrides: dict) -> None:

@@ -306,12 +306,12 @@ def riattiva_utente(uid: str, me: str = Depends(auth_user), db: Session = Depend
 
 
 @router.get("/ai/status")
-def ai_status():
+def ai_status(me: str = Depends(auth_user)):
     return ai.status()
 
 
 @router.post("/ai/classifica")
-def ai_classifica(payload: dict = Body(...)):
+def ai_classifica(payload: dict = Body(...), me: str = Depends(auth_user)):
     try:
         return ai.classifica(payload.get("oggetto", ""), payload.get("corpo", []), payload.get("allegati", []))
     except ai.AIUnavailable as e:
@@ -320,12 +320,12 @@ def ai_classifica(payload: dict = Body(...)):
 
 # ---------- comunicazioni ----------
 @router.get("/comunicazioni")
-def list_com(db: Session = Depends(get_db)):
+def list_com(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     return [c.dict() for c in db.query(models.Comunicazione).all()]
 
 
 @router.get("/comunicazioni/{cid}")
-def get_com(cid: str, db: Session = Depends(get_db)):
+def get_com(cid: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
     c = db.get(models.Comunicazione, cid)
     if not c:
         raise HTTPException(404, "Comunicazione non trovata")
@@ -479,7 +479,7 @@ def list_prat(me: str = Depends(auth_user), db: Session = Depends(get_db)):
 
 
 @router.get("/pratiche/{pid:path}")
-def get_prat(pid: str, db: Session = Depends(get_db)):
+def get_prat(pid: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
     p = db.get(models.Pratica, pid)
     if not p:
         raise HTTPException(404, "Pratica non trovata")
@@ -595,7 +595,7 @@ def list_atti(me: str = Depends(auth_user), db: Session = Depends(get_db)):
 
 
 @router.get("/atti/{aid}")
-def get_atto(aid: str, db: Session = Depends(get_db)):
+def get_atto(aid: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
     a = db.get(models.Atto, aid)
     if not a:
         raise HTTPException(404, "Atto non trovato")
@@ -707,12 +707,12 @@ def rigenera_contenuto(aid: str, payload: dict = Body(...), me: str = Depends(au
 
 # ---------- beni ----------
 @router.get("/beni")
-def list_beni(db: Session = Depends(get_db)):
+def list_beni(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     return [b.dict() for b in db.query(models.Bene).all()]
 
 
 @router.get("/beni/{bid}")
-def get_bene(bid: str, db: Session = Depends(get_db)):
+def get_bene(bid: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
     b = db.get(models.Bene, bid)
     if not b:
         raise HTTPException(404, "Bene non trovato")
@@ -829,7 +829,7 @@ def elimina_bene(bid: str, me: str = Depends(auth_user), db: Session = Depends(g
 
 # ---------- sicurezza & log ----------
 @router.get("/log")
-def log_attivita(db: Session = Depends(get_db)):
+def log_attivita(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     items = []
     for p in db.query(models.Pratica).all():
         for e in p.cronologia or []:
@@ -859,18 +859,18 @@ def documento_file(did: str, db: Session = Depends(get_db)):
 
 
 @router.get("/eccezioni")
-def eccezioni(db: Session = Depends(get_db)):
+def eccezioni(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     docs = db.query(models.Documento).filter(models.Documento.stato == "eccezione").all()
     return [d.dict() for d in docs]
 
 
 @router.get("/storage/status")
-def storage_status():
+def storage_status(me: str = Depends(auth_user)):
     return {"available": storage.available(), "bucket": settings.MINIO_BUCKET}
 
 
 @router.get("/pec/status")
-def pec_status():
+def pec_status(me: str = Depends(auth_user)):
     return {"configured": ingest.pec_configured(), "host": ingest.settings.PEC_HOST or None, "folder": ingest.settings.PEC_FOLDER}
 
 
@@ -890,12 +890,12 @@ def pec_sync(me: str = Depends(auth_user), db: Session = Depends(get_db)):
 
 # ---------- ricerca (semantica + lessicale) ----------
 @router.get("/cerca")
-def cerca(q: str = "", mode: str = "auto", db: Session = Depends(get_db)):
+def cerca(q: str = "", mode: str = "auto", me: str = Depends(auth_user), db: Session = Depends(get_db)):
     return search.cerca(db, q, mode)
 
 
 @router.get("/cerca/status")
-def cerca_status(db: Session = Depends(get_db)):
+def cerca_status(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     return search.status(db)
 
 
@@ -916,7 +916,7 @@ def _is_ritardo(p):
 
 
 @router.get("/cruscotto")
-def cruscotto(db: Session = Depends(get_db)):
+def cruscotto(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     com = db.query(models.Comunicazione).all()
     prat = db.query(models.Pratica).all()
     atti = db.query(models.Atto).all()

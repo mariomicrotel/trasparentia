@@ -3,13 +3,18 @@
 let _tokenFn = () => Promise.resolve(null);
 export function setTokenProvider(fn) { _tokenFn = fn; }
 
+// Utente corrente (modalità demo role-switch): inviato come X-Role su OGNI chiamata,
+// così anche gli endpoint di lettura protetti possono richiedere l'autenticazione.
+let _currentUser = null;
+export function setCurrentUser(u) { _currentUser = u || null; }
+
 async function req(method, path, body, me) {
   const headers = { "Content-Type": "application/json" };
   const token = await _tokenFn();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
-  } else if (me) {
-    headers["X-Role"] = me;
+  } else if (me || _currentUser) {
+    headers["X-Role"] = me || _currentUser;
   }
   const res = await fetch(path, {
     method,
@@ -31,8 +36,8 @@ async function upload(path, formData, me) {
   const token = await _tokenFn();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
-  } else if (me) {
-    headers["X-Role"] = me;
+  } else if (me || _currentUser) {
+    headers["X-Role"] = me || _currentUser;
   }
   const res = await fetch(path, { method: "POST", headers, body: formData });
   if (!res.ok) {

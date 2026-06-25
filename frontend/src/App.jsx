@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { api } from "./api.js";
+import { api, setCurrentUser } from "./api.js";
 import { Icon } from "./icons.jsx";
 import { setMeta, Avatar } from "./ui.jsx";
 import { NotifPanel } from "./views/Notifiche.jsx";
@@ -74,6 +74,10 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
   }, []);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  // Propaga l'utente corrente al client API: in modalità demo viene inviato come
+  // header X-Role su tutte le chiamate (necessario ora che anche i GET sono autenticati).
+  useEffect(() => { setCurrentUser(me); }, [me]);
 
   useEffect(() => {
     api.meta().then((m) => {

@@ -15,38 +15,54 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Metodi e header espliciti (niente "*"): più stretto e compatibile con la demo (X-Role).
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Role"],
 )
 
 app.include_router(router)
 
 
-_DEFAULT_CREDS = {"trasparentia", "admin", "password", "CAMBIA_QUESTA_PASSWORD_DB"}
+_DEFAULT_CREDS = {"trasparentia", "admin", "password", "CAMBIA_QUESTA_PASSWORD_DB", "CAMBIA_IN_PRODUZIONE"}
 
 
-def _security_warnings():
+def _db_password() -> str:
+    db_url = settings.DATABASE_URL or ""
+    if "://" in db_url and "@" in db_url:
+        try:
+            return db_url.split("://", 1)[1].split("@")[0].split(":", 1)[1]
+        except Exception:
+            return ""
+    return ""
+
+
+def _security_check():
+    """In demo: avvisa. In PRODUCTION: blocca l'avvio (fail-fast) se restano
+    configurazioni non sicure — auth disattivata, credenziali di default, API key AI vuota."""
     import logging
     log = logging.getLogger("trasparentia.security")
-    db_url = settings.DATABASE_URL or ""
-    # Estrai password da DATABASE_URL: postgresql+psycopg2://user:password@host/db
-    if "://" in db_url:
-        try:
-            pwd_part = db_url.split("://", 1)[1].split("@")[0].split(":", 1)[1]
-            if pwd_part in _DEFAULT_CREDS:
-                log.warning("SICUREZZA: password database è quella di default — cambiarla prima del go-live")
-        except Exception:
-            pass
-    minio_secret = settings.MINIO_SECRET_KEY or ""
-    if minio_secret in _DEFAULT_CREDS:
-        log.warning("SICUREZZA: MINIO_SECRET_KEY è quella di default — cambiarla prima del go-live")
+    problemi = []
     if not settings.KC_AUTH_ENABLED:
-        log.warning("SICUREZZA: KC_AUTH_ENABLED=false — autenticazione Keycloak disabilitata (ok in demo, NON in produzione)")
+        problemi.append("KC_AUTH_ENABLED=false — autenticazione Keycloak disattivata (in demo si usa X-Role)")
+    if _db_password() in _DEFAULT_CREDS:
+        problemi.append("password del database di default")
+    if (settings.MINIO_SECRET_KEY or "") in _DEFAULT_CREDS:
+        problemi.append("MINIO_SECRET_KEY di default")
+    if not (settings.AI_API_KEY or "").strip():
+        problemi.append("AI_API_KEY vuota — il server AI non è protetto da chiave")
+
+    if settings.PRODUCTION and problemi:
+        msg = "AVVIO BLOCCATO (PRODUCTION=true): " + "; ".join(problemi) + \
+              ". Correggere le impostazioni o impostare PRODUCTION=false per la demo."
+        log.critical(msg)
+        raise RuntimeError(msg)
+    for p in problemi:
+        log.warning("SICUREZZA: %s — NON adatto alla produzione", p)
 
 
 @app.on_event("startup")
 def _startup():
-    _security_warnings()
+    _security_check()
     init_db()
     storage.ensure_bucket()
     from .db import SessionLocal
