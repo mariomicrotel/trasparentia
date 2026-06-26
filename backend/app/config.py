@@ -75,6 +75,10 @@ class Settings:
 
     # Backup database (Fase 7)
     BACKUP_DIR: str = os.getenv("BACKUP_DIR", "/data/backup")
+    # Chiave di cifratura restic — letta dal backend solo per il controllo in produzione.
+    RESTIC_PASSWORD: str = os.getenv("RESTIC_PASSWORD", "")
+    # Password admin Keycloak — letta solo per il controllo in produzione.
+    KC_ADMIN_PASSWORD: str = os.getenv("KC_ADMIN_PASSWORD", "")
 
     CORS_ORIGINS: list[str] = os.getenv(
         "CORS_ORIGINS", "http://localhost:5173,http://localhost:4173"

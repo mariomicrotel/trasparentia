@@ -2,13 +2,14 @@
   "realm": "trasparentia",
   "displayName": "TrasParentIA Micro PA",
   "enabled": true,
-  "sslRequired": "none",
+  "sslRequired": "external",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": false,
+  "resetPasswordAllowed": true,
   "internationalizationEnabled": false,
   "defaultLocale": "it",
+  "passwordPolicy": "length(10) and upperCase(1) and specialChars(1) and digits(1)",
   "clients": [
     {
       "clientId": "trasparentia-app",
@@ -53,10 +54,11 @@
   ],
   "roles": {
     "realm": [
-      { "name": "operatore_protocollo", "description": "Operatore Protocollo — classifica e protocolla comunicazioni" },
-      { "name": "responsabile_ut", "description": "Responsabile Ufficio Tecnico — lavora pratiche, genera bozze" },
-      { "name": "istruttore", "description": "Istruttore Tecnico — istruttoria pratiche" },
-      { "name": "segretario", "description": "Segretario Comunale — supervisione e riassegnazioni" }
+      { "name": "operatore_protocollo",  "description": "Operatore Protocollo — classifica e protocolla comunicazioni" },
+      { "name": "responsabile_ut",       "description": "Responsabile Ufficio Tecnico — lavora pratiche, genera bozze" },
+      { "name": "responsabile_ufficio",  "description": "Responsabile di Ufficio — gestisce un ufficio specifico" },
+      { "name": "istruttore",            "description": "Istruttore Tecnico — istruttoria pratiche" },
+      { "name": "segretario",            "description": "Segretario Comunale — supervisione e riassegnazioni" }
     ]
   },
   "users": [
@@ -67,7 +69,7 @@
       "lastName": "Rossi",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": true }],
       "realmRoles": ["operatore_protocollo"]
     },
     {
@@ -77,7 +79,7 @@
       "lastName": "Esposito",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": true }],
       "realmRoles": ["responsabile_ut"]
     },
     {
@@ -87,7 +89,7 @@
       "lastName": "De Luca",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": true }],
       "realmRoles": ["istruttore"]
     },
     {
@@ -97,7 +99,7 @@
       "lastName": "Bianchi",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "comune2026!", "temporary": true }],
       "realmRoles": ["segretario"]
     }
   ]

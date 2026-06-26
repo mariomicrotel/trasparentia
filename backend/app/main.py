@@ -28,7 +28,11 @@ app.add_middleware(
 app.include_router(router)
 
 
-_DEFAULT_CREDS = {"trasparentia", "admin", "password", "CAMBIA_QUESTA_PASSWORD_DB", "CAMBIA_IN_PRODUZIONE"}
+_DEFAULT_CREDS = {
+    "trasparentia", "admin", "password",
+    "CAMBIA_QUESTA_PASSWORD_DB", "CAMBIA_IN_PRODUZIONE",
+    "demo-restic-key-docker-desktop",  # valore demo RESTIC_PASSWORD
+}
 
 
 def _db_password() -> str:
@@ -55,6 +59,10 @@ def _security_check():
         problemi.append("MINIO_SECRET_KEY di default")
     if not (settings.AI_API_KEY or "").strip():
         problemi.append("AI_API_KEY vuota — il server AI non è protetto da chiave")
+    if (settings.KC_ADMIN_PASSWORD or "") in _DEFAULT_CREDS:
+        problemi.append("KC_ADMIN_PASSWORD di default (Keycloak admin panel esposto)")
+    if (settings.RESTIC_PASSWORD or "") in _DEFAULT_CREDS:
+        problemi.append("RESTIC_PASSWORD di default — backup non cifrati in modo sicuro")
 
     if settings.PRODUCTION and problemi:
         msg = "AVVIO BLOCCATO (PRODUCTION=true): " + "; ".join(problemi) + \
