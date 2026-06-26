@@ -51,12 +51,20 @@ class Settings:
     ENTE_PEC: str = os.getenv("ENTE_PEC", "protocollo@pec.comune.roccadaspide.sa.it")
     TEMA_BLU: str = os.getenv("TEMA_BLU", "#0066cc")
 
-    # Autenticazione Keycloak (Fase 7). Default: disabilitata (usa X-Role per demo).
+    # Autenticazione Keycloak (Fase 7). Default: disabilitata (usa native auth o X-Role per demo).
     KC_AUTH_ENABLED: bool = os.getenv("KC_AUTH_ENABLED", "false").lower() == "true"
     KC_INTERNAL_URL: str = os.getenv("KC_INTERNAL_URL", "http://keycloak:8080")
     KC_REALM: str = os.getenv("KC_REALM", "trasparentia")
     KC_CLIENT_ID: str = os.getenv("KC_CLIENT_ID", "trasparentia-app")
     KC_PUBLIC_URL: str = os.getenv("KC_PUBLIC_URL", "http://localhost:8090")
+
+    # Autenticazione nativa email+password con JWT locale (HS256).
+    # Priorità: KC_AUTH_ENABLED > NATIVE_AUTH_ENABLED > demo X-Role.
+    NATIVE_AUTH_ENABLED: bool = os.getenv("NATIVE_AUTH_ENABLED", "true").lower() == "true"
+    # Chiave segreta per la firma dei JWT locali. CAMBIARE in produzione.
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "CAMBIA_QUESTA_CHIAVE_JWT_IN_PRODUZIONE")
+    # Durata token JWT locale in minuti (default 8 ore)
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 
     # Motore promemoria scadenze (Fase 6)
     NOTIFICHE_ENABLED: bool = os.getenv("NOTIFICHE_ENABLED", "true").lower() == "true"

@@ -19,26 +19,38 @@ async function bootstrap() {
   let kcEnabled = false;
   let kcUsername = null;
   let kcLogout = null;
+  let authMode = "demo";
 
   try {
     const r = await fetch("/api/auth/config");
     if (r.ok) {
       const cfg = await r.json();
-      if (cfg.enabled) {
+      if (cfg.mode === "keycloak" || cfg.enabled === true) {
+        // Keycloak: comportamento invariato
         const { initKeycloak, getTokenFreshly, getUsername, doLogout } = await import("./keycloak.js");
         await initKeycloak(cfg);
         setTokenProvider(getTokenFreshly);
         kcEnabled = true;
         kcUsername = getUsername();
         kcLogout = doLogout;
+        authMode = "keycloak";
+      } else if (cfg.mode === "native") {
+        authMode = "native";
+        // Il token viene letto da localStorage dentro api.js (_tokenFn default)
       }
+      // mode === "demo": authMode rimane "demo"
     }
   } catch {
-    // KC non raggiungibile o disabilitato: modalità demo role-switch
+    // Backend non raggiungibile: fallback demo
   }
 
   createRoot(document.getElementById("root")).render(
-    <App kcEnabled={kcEnabled} kcUsername={kcUsername} kcLogout={kcLogout} />
+    <App
+      kcEnabled={kcEnabled}
+      kcUsername={kcUsername}
+      kcLogout={kcLogout}
+      authMode={authMode}
+    />
   );
 }
 

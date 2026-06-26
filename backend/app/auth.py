@@ -1,12 +1,47 @@
-"""Verifica JWT emessi da Keycloak. Usato quando KC_AUTH_ENABLED=true.
-La chiave pubblica viene recuperata via JWKS e cachata per 5 minuti."""
+"""Autenticazione: JWT Keycloak (KC_AUTH_ENABLED=true) e JWT locale nativo (NATIVE_AUTH_ENABLED=true)."""
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 from .config import settings
 from . import reference as R
+
+# ── Auth nativa: password hashing + JWT HS256 ──────────────────────────────
+_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_NATIVE_ISSUER = "trasparentia-local"
+
+
+def hash_password(plain: str) -> str:
+    return _pwd.hash(plain)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return _pwd.verify(plain, hashed)
+    except Exception:
+        return False
+
+
+def create_local_token(username: str) -> str:
+    """Crea un JWT HS256 firmato localmente con scadenza configurabile."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    payload = {"sub": username, "exp": expire, "iss": _NATIVE_ISSUER}
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
+
+
+def username_from_local_token(token: str) -> str | None:
+    """Verifica un JWT locale e restituisce lo username, None se non valido/scaduto."""
+    try:
+        claims = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"],
+                            options={"verify_aud": False})
+        if claims.get("iss") != _NATIVE_ISSUER:
+            return None
+        return claims.get("sub")
+    except Exception:
+        return None
 
 _cache: dict = {"keys": None, "ts": 0.0}
 _JWKS_TTL = 300  # 5 min

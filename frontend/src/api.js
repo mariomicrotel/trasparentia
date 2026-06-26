@@ -1,10 +1,25 @@
 // Client API. Base relativa: in dev Vite fa proxy /api, in prod nginx.
-// Quando Keycloak è attivo, setTokenProvider inietta un getter asincrono per il Bearer token.
-let _tokenFn = () => Promise.resolve(null);
+const _STORAGE_KEY = "trasparentia_token";
+
+// Provider Bearer token (KC o native). Sostituito da setTokenProvider.
+let _tokenFn = () => Promise.resolve(localStorage.getItem(_STORAGE_KEY));
 export function setTokenProvider(fn) { _tokenFn = fn; }
 
-// Utente corrente (modalità demo role-switch): inviato come X-Role su OGNI chiamata,
-// così anche gli endpoint di lettura protetti possono richiedere l'autenticazione.
+// Callback chiamata quando il server risponde 401 (sessione scaduta).
+let _on401 = null;
+export function setOn401Handler(fn) { _on401 = fn; }
+
+// Auth nativa: salva / rimuove il token in localStorage.
+export function saveNativeToken(token) {
+  localStorage.setItem(_STORAGE_KEY, token);
+  _tokenFn = () => Promise.resolve(token);
+}
+export function clearNativeToken() {
+  localStorage.removeItem(_STORAGE_KEY);
+  _tokenFn = () => Promise.resolve(null);
+}
+
+// Utente corrente (modalità demo role-switch): inviato come X-Role su OGNI chiamata.
 let _currentUser = null;
 export function setCurrentUser(u) { _currentUser = u || null; }
 
@@ -21,6 +36,12 @@ async function req(method, path, body, me) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && _on401) {
+    _on401();
+    const err = new Error("Sessione scaduta");
+    err.status = 401;
+    throw err;
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch {}
@@ -49,6 +70,16 @@ async function upload(path, formData, me) {
 }
 
 export const api = {
+  // ── Auth ──────────────────────────────────────────────────────────────
+  authConfig: () => req("GET", "/api/auth/config"),
+  authSetupNeeded: () => req("GET", "/api/auth/setup-needed"),
+  authSetup: (payload) => req("POST", "/api/auth/setup", payload),
+  authLogin: (email, password) => req("POST", "/api/auth/login", { email, password }),
+  authChangePassword: (current_password, new_password) =>
+    req("POST", "/api/auth/change-password", { current_password, new_password }),
+  resetPasswordUtente: (uid, password) =>
+    req("POST", `/api/utenti/${encodeURIComponent(uid)}/reset-password`, { password }),
+
   meta: () => req("GET", "/api/meta"),
   aiStatus: () => req("GET", "/api/ai/status"),
   aiClassifica: (payload) => req("POST", "/api/ai/classifica", payload),

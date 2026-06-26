@@ -183,6 +183,8 @@ class Utente(Base):
     col: Mapped[str] = mapped_column(String, default="#0066cc")     # colore avatar
     attivo: Mapped[bool] = mapped_column(Boolean, default=True)
     creato: Mapped[str] = mapped_column(String, default="")
+    # Hash bcrypt della password (auth nativa). NULL = solo KC o demo.
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     def dict(self):
         return _to_dict(self)

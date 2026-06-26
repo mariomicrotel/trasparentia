@@ -55,9 +55,8 @@ def require_perm(me: str, perm: str):
 
 
 def auth_user(x_role: str | None = Header(None), authorization: str | None = Header(None)) -> str:
-    """FastAPI dependency: utente corrente da JWT Keycloak o X-Role header (solo dev)."""
+    """FastAPI dependency: utente corrente da JWT KC, JWT locale o X-Role (solo demo)."""
     if settings.KC_AUTH_ENABLED:
-        # Con KC attivo X-Role è vietato — solo Bearer JWT
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(401, "Autenticazione richiesta: Bearer token Keycloak")
         token = authorization.split(" ", 1)[1]
@@ -65,14 +64,23 @@ def auth_user(x_role: str | None = Header(None), authorization: str | None = Hea
         if not username:
             raise HTTPException(401, "Token non valido")
         if username not in R.USERS:
-            # Utente Keycloak non nella lista statica: deriva profilo e permessi dal token
             ctx = auth_module.user_context_from_token(token)
             if not ctx or not ctx["perm"]:
                 raise HTTPException(403, "Utente senza ruolo di piattaforma assegnato in Keycloak")
             R.USERS[username] = {k: v for k, v in ctx.items() if k != "perm"}
             R.PERM[username] = ctx["perm"]
         return username
-    # Modalità demo/dev: X-Role header
+
+    if settings.NATIVE_AUTH_ENABLED:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(401, "Login richiesto")
+        token = authorization.split(" ", 1)[1]
+        username = auth_module.username_from_local_token(token)
+        if not username or username not in R.USERS:
+            raise HTTPException(401, "Sessione scaduta. Effettuare nuovamente il login.")
+        return username
+
+    # Modalità demo: X-Role header
     me = x_role
     if not me or me not in R.USERS:
         raise HTTPException(400, "Autenticazione richiesta: header X-Role o Bearer token")
@@ -183,15 +191,88 @@ def get_meta():
 
 @router.get("/auth/config")
 def auth_config():
-    """Configurazione Keycloak per il frontend. enabled=false → usa role-switch demo."""
-    if not settings.KC_AUTH_ENABLED:
-        return {"enabled": False}
-    return {
-        "enabled": True,
-        "url": settings.KC_PUBLIC_URL,
-        "realm": settings.KC_REALM,
-        "clientId": settings.KC_CLIENT_ID,
-    }
+    """Modalità di autenticazione attiva: keycloak | native | demo."""
+    if settings.KC_AUTH_ENABLED:
+        return {"mode": "keycloak", "enabled": True,
+                "url": settings.KC_PUBLIC_URL, "realm": settings.KC_REALM,
+                "clientId": settings.KC_CLIENT_ID}
+    if settings.NATIVE_AUTH_ENABLED:
+        return {"mode": "native", "enabled": True}
+    return {"mode": "demo", "enabled": False}
+
+
+@router.get("/auth/setup-needed")
+def auth_setup_needed(db: Session = Depends(get_db)):
+    """True se il DB è vuoto e il primo amministratore non è ancora stato creato."""
+    needed = db.query(models.Utente).count() == 0
+    return {"needed": needed}
+
+
+@router.post("/auth/setup")
+def auth_setup(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """Crea il primo utente amministratore (segretario). Solo se il DB è completamente vuoto."""
+    if not settings.NATIVE_AUTH_ENABLED:
+        raise HTTPException(400, "Auth nativa non abilitata")
+    if db.query(models.Utente).count() > 0:
+        raise HTTPException(403, "Setup già completato. Accedere con le proprie credenziali.")
+    nome = (payload.get("nome") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    if not nome or not email or not password:
+        raise HTTPException(400, "Nome, email e password sono obbligatori")
+    if len(password) < 8:
+        raise HTTPException(400, "Password troppo breve (minimo 8 caratteri)")
+    from datetime import date as _date
+    uid = email.split("@")[0].replace(".", "_").replace("-", "_")[:30]
+    base, i = uid, 1
+    while db.query(models.Utente).filter(models.Utente.id == uid).first():
+        uid = f"{base}_{i}"; i += 1
+    u = models.Utente(
+        id=uid, nome=nome, email=email, ufficio="Segreteria Generale",
+        ruolo_kc="segretario", col="#6a4ec2",
+        password_hash=auth_module.hash_password(password),
+        attivo=True, creato=_date.today().isoformat(),
+    )
+    db.add(u); db.commit()
+    utenti_module.sync_memory(db)
+    token = auth_module.create_local_token(u.id)
+    return {"access_token": token, "token_type": "bearer", "user": utenti_module.to_dict(u)}
+
+
+@router.post("/auth/login")
+def auth_login(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """Login con email e password. Restituisce un JWT locale."""
+    if not settings.NATIVE_AUTH_ENABLED:
+        raise HTTPException(400, "Auth nativa non abilitata")
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    if not email or not password:
+        raise HTTPException(400, "Email e password obbligatori")
+    u = db.query(models.Utente).filter(
+        models.Utente.email == email,
+        models.Utente.attivo == True,  # noqa: E712
+    ).first()
+    if not u or not u.password_hash or not auth_module.verify_password(password, u.password_hash):
+        raise HTTPException(401, "Credenziali non valide")
+    token = auth_module.create_local_token(u.id)
+    return {"access_token": token, "token_type": "bearer", "user": utenti_module.to_dict(u)}
+
+
+@router.post("/auth/change-password")
+def auth_change_password(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Cambio password dell'utente autenticato."""
+    current = payload.get("current_password") or ""
+    new_pwd = payload.get("new_password") or ""
+    if not current or not new_pwd:
+        raise HTTPException(400, "Password corrente e nuova obbligatorie")
+    if len(new_pwd) < 8:
+        raise HTTPException(400, "Nuova password troppo breve (minimo 8 caratteri)")
+    u = db.query(models.Utente).filter(models.Utente.id == me).first()
+    if not u or not u.password_hash or not auth_module.verify_password(current, u.password_hash):
+        raise HTTPException(401, "Password corrente non valida")
+    u.password_hash = auth_module.hash_password(new_pwd)
+    db.commit()
+    return {"ok": True, "detail": "Password aggiornata con successo"}
 
 
 @router.get("/me")
@@ -235,6 +316,7 @@ def crea_utente(payload: dict = Body(...), me: str = Depends(auth_user), db: Ses
     if not nome:
         raise HTTPException(400, "Nome obbligatorio")
     from datetime import date as _date
+    password = payload.get("password") or ""
     u = models.Utente(
         id=uid, nome=nome,
         email=(payload.get("email") or "").strip(),
@@ -243,6 +325,7 @@ def crea_utente(payload: dict = Body(...), me: str = Depends(auth_user), db: Ses
         col=payload.get("col") or "#0066cc",
         attivo=True,
         creato=_date.today().isoformat(),
+        password_hash=auth_module.hash_password(password) if password else None,
     )
     db.add(u)
     db.commit()
@@ -303,6 +386,23 @@ def riattiva_utente(uid: str, me: str = Depends(auth_user), db: Session = Depend
     db.commit()
     utenti_module.sync_memory(db)
     return {"ok": True, "detail": f"Utente {uid} riattivato"}
+
+
+@router.post("/utenti/{uid}/reset-password")
+def reset_password_utente(uid: str, payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Reimposta la password di un utente (solo supervisione). Auth nativa obbligatoria."""
+    require_perm(me, "supervisione")
+    if not settings.NATIVE_AUTH_ENABLED:
+        raise HTTPException(400, "Auth nativa non abilitata")
+    new_pwd = payload.get("password") or ""
+    if len(new_pwd) < 8:
+        raise HTTPException(400, "Password troppo breve (minimo 8 caratteri)")
+    u = db.query(models.Utente).filter(models.Utente.id == uid).first()
+    if not u:
+        raise HTTPException(404, "Utente non trovato")
+    u.password_hash = auth_module.hash_password(new_pwd)
+    db.commit()
+    return {"ok": True, "detail": f"Password di {u.nome} aggiornata"}
 
 
 @router.get("/ai/status")

@@ -31,7 +31,8 @@ app.include_router(router)
 _DEFAULT_CREDS = {
     "trasparentia", "admin", "password",
     "CAMBIA_QUESTA_PASSWORD_DB", "CAMBIA_IN_PRODUZIONE",
-    "demo-restic-key-docker-desktop",  # valore demo RESTIC_PASSWORD
+    "demo-restic-key-docker-desktop",
+    "CAMBIA_QUESTA_CHIAVE_JWT_IN_PRODUZIONE",
 }
 
 
@@ -63,6 +64,8 @@ def _security_check():
         problemi.append("KC_ADMIN_PASSWORD di default (Keycloak admin panel esposto)")
     if (settings.RESTIC_PASSWORD or "") in _DEFAULT_CREDS:
         problemi.append("RESTIC_PASSWORD di default — backup non cifrati in modo sicuro")
+    if settings.NATIVE_AUTH_ENABLED and (settings.JWT_SECRET_KEY or "") in _DEFAULT_CREDS:
+        problemi.append("JWT_SECRET_KEY di default — token di sessione non sicuri")
 
     if settings.PRODUCTION and problemi:
         msg = "AVVIO BLOCCATO (PRODUCTION=true): " + "; ".join(problemi) + \

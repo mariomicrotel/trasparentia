@@ -59,17 +59,24 @@ SEED = [
 ]
 
 
+_DEMO_PASSWORD = "comune2026!"  # password demo per l'ambiente di test
+
+
 def seed(db: Session) -> None:
-    """Popola/integra la tabella utenti. Idempotente: aggiunge solo gli id mancanti,
-    così i responsabili dei nuovi uffici vengono creati anche su DB già inizializzato."""
+    """Popola/integra la tabella utenti. Idempotente: aggiunge solo gli id mancanti.
+    Se NATIVE_AUTH_ENABLED imposta la password demo per il login immediato in test."""
+    from .config import settings
+    from . import auth as auth_module
     today = date.today().isoformat()
     esistenti = {u.id for u in db.query(models.Utente.id).all()}
     aggiunti = False
     for uid, nome, email, ufficio, ruolo_kc, col in SEED:
         if uid in esistenti:
             continue
+        pwd_hash = auth_module.hash_password(_DEMO_PASSWORD) if settings.NATIVE_AUTH_ENABLED else None
         db.add(models.Utente(id=uid, nome=nome, email=email, ufficio=ufficio,
-                             ruolo_kc=ruolo_kc, col=col, attivo=True, creato=today))
+                             ruolo_kc=ruolo_kc, col=col, attivo=True, creato=today,
+                             password_hash=pwd_hash))
         aggiunti = True
     if aggiunti:
         db.commit()

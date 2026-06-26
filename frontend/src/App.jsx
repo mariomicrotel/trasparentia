@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { api, setCurrentUser } from "./api.js";
+import { api, setCurrentUser, saveNativeToken, clearNativeToken, setOn401Handler } from "./api.js";
+import Login from "./views/Login.jsx";
 import { Icon } from "./icons.jsx";
 import { setMeta, Avatar } from "./ui.jsx";
 import { NotifPanel } from "./views/Notifiche.jsx";
@@ -53,7 +54,26 @@ function Stub({ title, icon, nav }) {
   );
 }
 
-export default function App({ kcEnabled = false, kcUsername = null, kcLogout = null }) {
+export default function App({ kcEnabled = false, kcUsername = null, kcLogout = null, authMode = "demo" }) {
+  // Auth nativa: utente loggato (null = non autenticato → mostra Login)
+  const [nativeUser, setNativeUser] = useState(null);
+
+  // Gestore sessione scaduta per native auth
+  useEffect(() => {
+    if (authMode !== "native") return;
+    setOn401Handler(() => {
+      clearNativeToken();
+      setNativeUser(null);
+    });
+    // Se c'è già un token in localStorage, recupera il profilo utente
+    const stored = localStorage.getItem("trasparentia_token");
+    if (stored) {
+      api.getMe().then(u => setNativeUser(u)).catch(() => {
+        clearNativeToken();
+      });
+    }
+  }, [authMode]);
+
   const [ready, setReady] = useState(false);
   const [M, setM] = useState(null);
   const [me, setMe] = useState(kcEnabled && kcUsername ? kcUsername : "rossi");
@@ -75,9 +95,13 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
-  // Propaga l'utente corrente al client API: in modalità demo viene inviato come
-  // header X-Role su tutte le chiamate (necessario ora che anche i GET sono autenticati).
-  useEffect(() => { setCurrentUser(me); }, [me]);
+  // In native auth: sincronizza me con l'utente del JWT al login/refresh
+  useEffect(() => {
+    if (authMode === "native" && nativeUser?.id) setMe(nativeUser.id);
+  }, [authMode, nativeUser]);
+
+  // In demo mode: propaga X-Role su tutte le chiamate
+  useEffect(() => { setCurrentUser(authMode === "demo" ? me : null); }, [me, authMode]);
 
   useEffect(() => {
     api.meta().then((m) => {
@@ -117,10 +141,26 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     toast(`Ruolo: ${M.users[r].ruolo}`, "");
   }
 
+  // Native auth: mostra login se non autenticato
+  if (authMode === "native" && !nativeUser) {
+    return (
+      <Login onLogin={(token, user) => {
+        saveNativeToken(token);
+        setNativeUser(user);
+        setMe(user.id);
+      }} />
+    );
+  }
+
+  function nativeLogout() {
+    clearNativeToken();
+    setNativeUser(null);
+  }
+
   if (!ready || !M) return <div style={{ padding: 40, fontFamily: "Titillium Web, sans-serif" }}>Caricamento…</div>;
 
   const ENTE = M.ente;
-  const viewProps = { me, nav, toast, refresh, tick, M };
+  const viewProps = { me, nav, toast, refresh, tick, M, authMode };
 
   function renderView() {
     const { view, params } = route;
@@ -168,7 +208,9 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
         <SlimbarCrest tick={tick} />
         <span><strong>{ENTE.nome}</strong>{` · Provincia di ${ENTE.prov}`}</span>
         <span className="slimbar__spacer" />
-        <span className="slimbar__chip">{kcEnabled ? "AUTENTICAZIONE KEYCLOAK" : "AMBIENTE DIMOSTRATIVO"}</span>
+        <span className="slimbar__chip">
+          {kcEnabled ? "AUTENTICAZIONE KEYCLOAK" : authMode === "native" ? "ACCESSO LOCALE" : "AMBIENTE DIMOSTRATIVO"}
+        </span>
         <span className="slimbar__sep" /><a href="#">Assistenza</a><a href="#">Manuale</a>
       </div>
 
@@ -213,7 +255,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
           </div>
           <div className="role">
             {kcEnabled ? (
-              /* Keycloak attivo: mostra utente autenticato + pulsante logout */
+              /* Keycloak: utente autenticato + logout */
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <Avatar user={kcUser || me} />
                 <span className="role__meta">
@@ -221,6 +263,18 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
                   <span className="role__role">{kcUser?.ruolo ?? M.users[me]?.ruolo ?? ""}</span>
                 </span>
                 <button className="btn btn--subtle btn--sm" onClick={kcLogout} title="Esci" style={{ marginLeft: 4 }}>
+                  <Icon name="arrowRight" size={15} stroke={2} />Esci
+                </button>
+              </div>
+            ) : authMode === "native" ? (
+              /* Auth nativa: utente dal JWT + logout */
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Avatar user={nativeUser || me} />
+                <span className="role__meta">
+                  <span className="role__name">{nativeUser?.nome ?? me}</span>
+                  <span className="role__role">{nativeUser?.ruolo ?? ""}</span>
+                </span>
+                <button className="btn btn--subtle btn--sm" onClick={nativeLogout} title="Esci" style={{ marginLeft: 4 }}>
                   <Icon name="arrowRight" size={15} stroke={2} />Esci
                 </button>
               </div>
