@@ -1,12 +1,17 @@
 """TrasParentIA Micro PA — entrypoint FastAPI."""
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
 from .seed import init_db
 from . import storage
 from .api import router
 from .notifiche import start_scheduler, stop_scheduler
+
+log = logging.getLogger("trasparentia")
 
 app = FastAPI(title="TrasParentIA Micro PA", version="0.1.0",
               description="Piattaforma AI on-prem di supporto ai piccoli Comuni (fetta verticale Ufficio Tecnico).")
@@ -60,6 +65,12 @@ def _security_check():
         log.warning("SICUREZZA: %s — NON adatto alla produzione", p)
 
 
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    log.error("Errore non gestito %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Errore interno del server"})
+
+
 @app.on_event("startup")
 def _startup():
     _security_check()
@@ -75,11 +86,49 @@ def _startup():
 @app.on_event("shutdown")
 def _shutdown():
     stop_scheduler()
+    from .ai import client as ai_client
+    ai_client.close()
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "trasparentia-backend"}
+
+
+@app.get("/readiness")
+def readiness():
+    """Readiness probe: verifica DB, storage e Redis. Restituisce 200 se tutto ok, 503 se degradato."""
+    from sqlalchemy import text
+    from .db import SessionLocal
+    checks: dict[str, str] = {}
+
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception as e:
+        checks["db"] = f"error: {e}"
+
+    try:
+        storage.ensure_bucket()
+        checks["storage"] = "ok"
+    except Exception as e:
+        checks["storage"] = f"error: {e}"
+
+    try:
+        import redis
+        r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+        r.ping()
+        r.close()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {e}"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    return JSONResponse(
+        status_code=200 if all_ok else 503,
+        content={"status": "ready" if all_ok else "degraded", "checks": checks},
+    )
 
 
 @app.get("/")

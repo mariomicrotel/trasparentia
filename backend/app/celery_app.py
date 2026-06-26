@@ -18,6 +18,9 @@ celery.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
+    # Limiti di tempo: evitano task bloccati (IMAP hung, AI timeout non gestito, ecc.)
+    task_soft_time_limit=270,   # SoftTimeLimitExceeded → il task può fare cleanup
+    task_time_limit=300,        # SIGKILL dopo 5 min (hard kill assoluto)
     beat_schedule={
         "poll-pec": {
             "task": "app.tasks.poll_pec",

@@ -11,6 +11,28 @@ from . import prompts
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
+# Client persistente: riusa le connessioni TCP verso il server AI (RTT ridotto, meno overhead TLS).
+# max_connections=4 basta per un Comune piccolo (un solo worker GPU attivo alla volta).
+# Lazy init: settings.AI_TLS_VERIFY è disponibile a runtime (variabile d'env), non da DB.
+_http: httpx.Client | None = None
+
+
+def _get_http() -> httpx.Client:
+    global _http
+    if _http is None or _http.is_closed:
+        _http = httpx.Client(
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=2, keepalive_expiry=30),
+            verify=settings.AI_TLS_VERIFY,
+        )
+    return _http
+
+
+def close() -> None:
+    global _http
+    if _http is not None and not _http.is_closed:
+        _http.close()
+        _http = None
+
 
 class AIUnavailable(Exception):
     pass
@@ -47,9 +69,8 @@ def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = No
     if fmt_json:
         payload["format"] = "json"
     try:
-        r = httpx.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
-                       headers=_headers(), timeout=settings.AI_TIMEOUT,
-                       verify=settings.AI_TLS_VERIFY)
+        r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
+                             headers=_headers(), timeout=settings.AI_TIMEOUT)
         r.raise_for_status()
         content = r.json()["message"]["content"]
         # rimuove eventuali blocchi di reasoning residui (<think>…</think>) lasciati dal modello
@@ -66,8 +87,7 @@ def _draft_model() -> str:
 def status() -> dict:
     """Verifica che Ollama risponda e che il modello sia disponibile."""
     try:
-        r = httpx.get(f"{settings.OLLAMA_BASE_URL}/api/tags", headers=_headers(), timeout=5,
-                      verify=settings.AI_TLS_VERIFY)
+        r = _get_http().get(f"{settings.OLLAMA_BASE_URL}/api/tags", headers=_headers(), timeout=5)
         r.raise_for_status()
         models = [m.get("name", "") for m in r.json().get("models", [])]
         present = any(settings.AI_MODEL_GEN.split(":")[0] in m for m in models)
@@ -86,8 +106,7 @@ def test_inference() -> dict:
     # ── step 1: server raggiungibile? ─────────────────────────────────────
     t0 = time.monotonic()
     try:
-        r = httpx.get(f"{settings.OLLAMA_BASE_URL}/api/tags", headers=_headers(), timeout=5,
-                      verify=settings.AI_TLS_VERIFY)
+        r = _get_http().get(f"{settings.OLLAMA_BASE_URL}/api/tags", headers=_headers(), timeout=5)
         r.raise_for_status()
         models = [m.get("name", "") for m in r.json().get("models", [])]
         ms = int((time.monotonic() - t0) * 1000)
@@ -138,9 +157,8 @@ def test_inference() -> dict:
             "options": {"temperature": 0, "num_predict": 8},
             "keep_alive": "30m",
         }
-        r = httpx.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
-                       headers=_headers(), timeout=60,
-                       verify=settings.AI_TLS_VERIFY)
+        r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
+                             headers=_headers(), timeout=60)
         r.raise_for_status()
         latency_ms = int((time.monotonic() - t1) * 1000)
         risposta = r.json()["message"]["content"].strip()
@@ -213,10 +231,9 @@ def embed(text: str) -> list[float] | None:
     """Embedding del testo via Ollama (modello AI_MODEL_EMBED). Per la ricerca semantica.
     Usa /api/embed (Ollama ≥0.4) con campo 'input'; risposta in embeddings[0]."""
     try:
-        r = httpx.post(f"{settings.OLLAMA_BASE_URL}/api/embed",
-                       json={"model": settings.AI_MODEL_EMBED, "input": text[:4000]},
-                       headers=_headers(), timeout=settings.AI_TIMEOUT,
-                       verify=settings.AI_TLS_VERIFY)
+        r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/embed",
+                             json={"model": settings.AI_MODEL_EMBED, "input": text[:4000]},
+                             headers=_headers(), timeout=settings.AI_TIMEOUT)
         r.raise_for_status()
         data = r.json()
         # Ollama ≥0.4: {"embeddings": [[...]]}; fallback per versioni precedenti

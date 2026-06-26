@@ -347,6 +347,8 @@ async def importa_comunicazione(
     estrazione testo (OCR se necessario) → classificazione AI → Comunicazione."""
     require_perm(me, "classifica")
     data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File '{file.filename}' supera il limite di 20 MB")
     fname = file.filename or "documento"
     ext = parsing.extract_text(fname, file.content_type or "", data)
 
