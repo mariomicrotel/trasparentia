@@ -20,6 +20,10 @@ export default function Utenti({ M, me, toast, tick, nav }) {
   const [editingUid, setEditingUid]   = useState(null);
   const [formData, setFormData]       = useState({});
   const [formBusy, setFormBusy]       = useState(false);
+  const [showPwd, setShowPwd]         = useState(false);
+  const [resetPwdFor, setResetPwdFor] = useState(null);
+  const [resetPwdVal, setResetPwdVal] = useState("");
+  const [resetPwdBusy, setResetPwdBusy] = useState(false);
 
   const load = useCallback(() => {
     if (!canAdmin) return;
@@ -50,7 +54,8 @@ export default function Utenti({ M, me, toast, tick, nav }) {
 
   function openCreate() {
     setEditingUid(null);
-    setFormData({ id: "", nome: "", email: "", ufficio: ufficiDisp[0] || "", ruolo_kc: Object.keys(ruoliDisp)[0] || "", col: "#0066cc" });
+    setShowPwd(false);
+    setFormData({ id: "", nome: "", email: "", ufficio: ufficiDisp[0] || "", ruolo_kc: Object.keys(ruoliDisp)[0] || "", col: "#0066cc", password: "" });
     setFormOpen(true);
   }
   function openEdit(u) {
@@ -59,6 +64,17 @@ export default function Utenti({ M, me, toast, tick, nav }) {
     setFormOpen(true);
   }
   function closeForm() { setFormOpen(false); setEditingUid(null); }
+
+  async function doResetPwd(uid) {
+    if (!resetPwdVal || resetPwdVal.length < 8) { toast("Password troppo breve (min 8 caratteri)", ""); return; }
+    setResetPwdBusy(true);
+    try {
+      await api.resetPasswordUtente(uid, resetPwdVal);
+      toast("Password reimpostata", "success");
+      setResetPwdFor(null); setResetPwdVal("");
+    } catch (e) { toast(e.message || "Errore", ""); }
+    finally { setResetPwdBusy(false); }
+  }
 
   async function submitForm() {
     setFormBusy(true);
@@ -153,6 +169,25 @@ export default function Utenti({ M, me, toast, tick, nav }) {
                   />
                 </div>
               ))}
+              {!editingUid && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Password iniziale</label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showPwd ? "text" : "password"}
+                      placeholder="Minimo 8 caratteri"
+                      value={formData.password || ""}
+                      onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
+                      autoComplete="new-password"
+                      style={{ padding: "8px 36px 8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--surface)", color: "var(--text)", width: "100%", boxSizing: "border-box" }}
+                    />
+                    <button type="button" onClick={() => setShowPwd(v => !v)}
+                      style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 2 }}>
+                      <Icon name={showPwd ? "eyeOff" : "eye"} size={15} stroke={2} />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Ufficio</label>
                 <select value={formData.ufficio || ""} onChange={(e) => setFormData((f) => ({ ...f, ufficio: e.target.value }))}
@@ -204,45 +239,66 @@ export default function Utenti({ M, me, toast, tick, nav }) {
               const permList = Object.entries(M.perm?.[u.id] || {}).filter(([, v]) => v).map(([k]) => PERM_LBL[k] || k);
               return (
                 <div key={u.id} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
                   borderRadius: 8, border: "1px solid var(--border)",
                   background: u.attivo === false ? "var(--surface)" : "var(--surface-2)",
                   opacity: u.attivo === false ? 0.65 : 1,
+                  overflow: "hidden",
                 }}>
-                  <Avatar user={u} size={44} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                      {u.nome}
-                      <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)", fontFamily: "monospace" }}>@{u.id}</span>
-                      {u.attivo === false && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 4, background: "var(--rosso-bg, #fff0f1)", color: "var(--rosso)" }}>SOSPESO</span>
-                      )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
+                    <Avatar user={u} size={44} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                        {u.nome}
+                        <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)", fontFamily: "monospace" }}>@{u.id}</span>
+                        {u.attivo === false && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 4, background: "var(--rosso-bg, #fff0f1)", color: "var(--rosso)" }}>SOSPESO</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
+                        {u.ruolo}{u.ufficio ? ` · ${u.ufficio}` : ""}
+                        {u.email ? <span style={{ marginLeft: 10, opacity: 0.7 }}>{u.email}</span> : null}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
+                        {permList.map((p) => (
+                          <span key={p} style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "var(--blu-bg, #e8f0fb)", color: "var(--blu)" }}>{p}</span>
+                        ))}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
-                      {u.ruolo}{u.ufficio ? ` · ${u.ufficio}` : ""}
-                      {u.email ? <span style={{ marginLeft: 10, opacity: 0.7 }}>{u.email}</span> : null}
-                    </div>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
-                      {permList.map((p) => (
-                        <span key={p} style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "var(--blu-bg, #e8f0fb)", color: "var(--blu)" }}>{p}</span>
-                      ))}
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button className="btn btn--subtle btn--sm" onClick={() => openEdit(u)} title="Modifica utente">
+                        <Icon name="edit" size={13} stroke={2} />Modifica
+                      </button>
+                      <button className="btn btn--subtle btn--sm"
+                        onClick={() => { setResetPwdFor(resetPwdFor === u.id ? null : u.id); setResetPwdVal(""); }}
+                        title="Reimposta password">
+                        <Icon name="lock" size={13} stroke={2} />Password
+                      </button>
+                      <button
+                        className="btn btn--subtle btn--sm"
+                        style={{ borderColor: u.attivo === false ? "var(--verde)" : "var(--rosso)", color: u.attivo === false ? "var(--verde)" : "var(--rosso)" }}
+                        onClick={() => toggleSospeso(u)}
+                        disabled={u.id === me && u.attivo !== false}
+                        title={u.attivo === false ? "Riattiva accesso" : "Sospendi accesso"}
+                      >
+                        <Icon name={u.attivo === false ? "play" : "pause"} size={13} stroke={2} />
+                        {u.attivo === false ? "Riattiva" : "Sospendi"}
+                      </button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button className="btn btn--subtle btn--sm" onClick={() => openEdit(u)} title="Modifica utente">
-                      <Icon name="edit" size={13} stroke={2} />Modifica
-                    </button>
-                    <button
-                      className="btn btn--subtle btn--sm"
-                      style={{ borderColor: u.attivo === false ? "var(--verde)" : "var(--rosso)", color: u.attivo === false ? "var(--verde)" : "var(--rosso)" }}
-                      onClick={() => toggleSospeso(u)}
-                      disabled={u.id === me && u.attivo !== false}
-                      title={u.attivo === false ? "Riattiva accesso" : "Sospendi accesso"}
-                    >
-                      <Icon name={u.attivo === false ? "play" : "pause"} size={13} stroke={2} />
-                      {u.attivo === false ? "Riattiva" : "Sospendi"}
-                    </button>
-                  </div>
+                  {resetPwdFor === u.id && (
+                    <div style={{ padding: "10px 14px 12px", borderTop: "1px solid var(--border)", background: "var(--surface)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)" }}>Nuova password per <b>{u.nome}</b>:</span>
+                      <input type="password" placeholder="Minimo 8 caratteri" value={resetPwdVal}
+                        onChange={e => setResetPwdVal(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && doResetPwd(u.id)}
+                        style={{ padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--bg-input, #fff)", color: "var(--text)", width: 200 }}
+                      />
+                      <button className="btn btn--primary btn--sm" onClick={() => doResetPwd(u.id)} disabled={resetPwdBusy}>
+                        {resetPwdBusy ? "…" : "Conferma"}
+                      </button>
+                      <button className="btn btn--subtle btn--sm" onClick={() => setResetPwdFor(null)}>Annulla</button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -255,10 +311,9 @@ export default function Utenti({ M, me, toast, tick, nav }) {
           <div className="banner banner--verde" style={{ fontSize: 12.5 }}>
             <Icon name="lock" size={16} />
             <div>
-              Le credenziali di accesso sono gestite da <b>Keycloak</b> (in produzione) o dal role-switch demo.
-              Aggiungere un utente qui crea il profilo di piattaforma; assegnare il ruolo Keycloak è un passaggio separato nella <b>Console Keycloak</b>.
+              Con <b>auth nativa</b>: usa «Password» per impostare o reimpostare la password di un utente. Con <b>Keycloak</b>: crea anche l'utente nella Console Keycloak e assegnagli il ruolo corrispondente.
               {" "}<button className="btn btn--subtle btn--sm" style={{ marginLeft: 8 }} onClick={() => nav("config")}>
-                <Icon name="settings" size={13} stroke={2} />Vai a Configurazione
+                <Icon name="settings" size={13} stroke={2} />Configurazione
               </button>
             </div>
           </div>
