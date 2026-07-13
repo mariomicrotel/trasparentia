@@ -197,34 +197,70 @@ def _norma_rif_titolo(r) -> tuple[str, str]:
 def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[dict]:
     """Ricerca lessicale nel corpus normativo vigente: match dei termini della
     domanda su testo/rubrica/titolo, ordinati per numero di termini presenti.
-    Robusta dove la semantica fallisce (nomi di regolamenti, sigle come «IMU»)."""
+    Robusta dove la semantica fallisce (nomi di regolamenti, sigle come «IMU»).
+
+    Filtro di SPECIFICITÀ (stile IDF): scarta i termini generici presenti in quasi
+    tutti i regolamenti (es. «stati», «comune», «articolo») che aggancerebbero
+    documenti non pertinenti; conta solo i termini discriminanti. Se nessun termine
+    è discriminante ritorna [] (→ nessun regolamento allegato a caso)."""
     termini = _termini(query)
     if not termini:
         return []
+
+    tot_reg = db.query(models.Regolamento).filter(models.Regolamento.vigente == True).count()  # noqa: E712
+    # Scarta i termini generici (presenti in ≥50% dei regolamenti vigenti): parole
+    # comuni come «stati», «comune», «articolo» aggancerebbero documenti a caso.
+    specifici = []
+    for t in termini:
+        df = (db.query(models.NormaChunk.regolamentoId)
+                .filter(models.NormaChunk.vigente == True,          # noqa: E712
+                        or_(models.NormaChunk.testo.ilike(f"%{t}%"),
+                            models.NormaChunk.rubrica.ilike(f"%{t}%"),
+                            models.NormaChunk.regolamento.ilike(f"%{t}%")))
+                .distinct().count())
+        if df == 0:
+            continue
+        if tot_reg <= 1 or df / tot_reg < 0.50:
+            specifici.append(t)
+    if not specifici:
+        return []  # solo termini generici → nessun aggancio affidabile
+
     conds = [or_(models.NormaChunk.testo.ilike(f"%{t}%"),
                  models.NormaChunk.rubrica.ilike(f"%{t}%"),
-                 models.NormaChunk.regolamento.ilike(f"%{t}%")) for t in termini]
+                 models.NormaChunk.regolamento.ilike(f"%{t}%")) for t in specifici]
     rows = (db.query(models.NormaChunk)
               .filter(models.NormaChunk.vigente == True, or_(*conds))  # noqa: E712
               .limit(400).all())  # ampio: un solo documento può avere >150 chunk
 
-    # Scoring per CONFINE DI PAROLA: l'ILIKE è solo un prefiltro grezzo (a
-    # sottostringa: «funziona» aggancerebbe «funzionario»). Qui contiamo solo i
-    # match a parola intera, per non allegare regolamenti a sproposito.
-    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in termini]
+    # Match a CONFINE DI PAROLA (l'ILIKE è solo un prefiltro grezzo a sottostringa:
+    # «funziona» aggancerebbe «funzionario»). Un chunk si QUALIFICA se:
+    #  - un termine colpisce il TITOLO o la rubrica (segnale forte: la domanda
+    #    riguarda proprio quel regolamento/articolo), OPPURE
+    #  - almeno 2 termini della domanda CO-OCCORRONO nello stesso chunk
+    #    (es. «limite/spesa/personale» del PIAO), evitando i match sparsi di una
+    #    sola parola comune («stati» qua, «pratica» là).
+    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in specifici]
 
-    def score(r):
-        blob = f"{r.regolamento} {r.rubrica or ''} {r.testo}".lower()
-        return sum(1 for p in pats if p.search(blob))
+    def valuta(r):
+        intest = f"{r.regolamento} {r.rubrica or ''}".lower()
+        blob = f"{intest} {r.testo}".lower()
+        title_hit = any(p.search(intest) for p in pats)
+        body_hits = sum(1 for p in pats if p.search(blob))
+        qualifica = title_hit or body_hits >= 2
+        # rank: prima i match nel titolo, poi per numero di termini
+        return qualifica, (1 if title_hit else 0, body_hits)
 
-    rows.sort(key=score, reverse=True)
+    valutati = [(r, *valuta(r)) for r in rows]
+    valutati = [(r, rank) for (r, ok, rank) in valutati if ok]
+    valutati.sort(key=lambda x: x[1], reverse=True)
+
     out, visti = [], set()
-    for r in rows:
+    for r, _ in valutati:
         # Dedup per articolo, MA per i documenti senza articoli (articolo=None,
         # es. PIAO) ogni chunk è distinto: dedup per id, altrimenti collasserebbero
-        # tutti in uno solo e i passaggi con il dato cercato andrebbero persi.
+        # tutti in uno solo e i passaggi col dato cercato andrebbero persi.
         key = (r.regolamentoId, r.articolo) if r.articolo else r.id
-        if key in visti or score(r) == 0:
+        if key in visti:
             continue
         visti.add(key)
         rif, titolo = _norma_rif_titolo(r)
