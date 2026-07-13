@@ -57,6 +57,7 @@ function Stub({ title, icon, nav }) {
 export default function App({ kcEnabled = false, kcUsername = null, kcLogout = null, authMode = "demo" }) {
   // Auth nativa: utente loggato (null = non autenticato → mostra Login)
   const [nativeUser, setNativeUser] = useState(null);
+  const [changePwd, setChangePwd] = useState(null); // null | {cur:"",nw:"",nw2:"",busy:false,err:""}
 
   // Gestore sessione scaduta per native auth
   useEffect(() => {
@@ -155,6 +156,22 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
   function nativeLogout() {
     clearNativeToken();
     setNativeUser(null);
+  }
+
+  async function submitChangePwd() {
+    if (!changePwd) return;
+    const { cur, nw, nw2 } = changePwd;
+    if (!cur) { setChangePwd(s => ({ ...s, err: "Inserisci la password attuale" })); return; }
+    if (nw.length < 8) { setChangePwd(s => ({ ...s, err: "La nuova password è troppo breve (min 8 caratteri)" })); return; }
+    if (nw !== nw2) { setChangePwd(s => ({ ...s, err: "Le password non coincidono" })); return; }
+    setChangePwd(s => ({ ...s, busy: true, err: "" }));
+    try {
+      await api.authChangePassword(cur, nw);
+      toast("Password aggiornata", "success");
+      setChangePwd(null);
+    } catch (e) {
+      setChangePwd(s => ({ ...s, busy: false, err: e.message || "Errore" }));
+    }
   }
 
   if (!ready || !M) return <div style={{ padding: 40, fontFamily: "Titillium Web, sans-serif" }}>Caricamento…</div>;
@@ -274,7 +291,12 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
                   <span className="role__name">{nativeUser?.nome ?? me}</span>
                   <span className="role__role">{nativeUser?.ruolo ?? ""}</span>
                 </span>
-                <button className="btn btn--subtle btn--sm" onClick={nativeLogout} title="Esci" style={{ marginLeft: 4 }}>
+                <button className="btn btn--subtle btn--sm"
+                  onClick={() => setChangePwd({ cur: "", nw: "", nw2: "", busy: false, err: "" })}
+                  title="Cambia password" style={{ marginLeft: 4 }}>
+                  <Icon name="lock" size={15} stroke={2} />
+                </button>
+                <button className="btn btn--subtle btn--sm" onClick={nativeLogout} title="Esci">
                   <Icon name="arrowRight" size={15} stroke={2} />Esci
                 </button>
               </div>
@@ -343,6 +365,51 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
           </div>
         ))}
       </div>
+
+      {changePwd && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={(e) => { if (e.target === e.currentTarget) setChangePwd(null); }}>
+          <div style={{
+            background: "var(--bg-card, #fff)", borderRadius: 12, padding: "32px 32px 24px",
+            width: "100%", maxWidth: 400, boxShadow: "0 8px 40px rgba(0,0,0,.2)",
+            fontFamily: "Titillium Web, sans-serif",
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon name="lock" size={18} stroke={2} style={{ color: "var(--blu, #0066cc)" }} />
+              Cambia password
+            </div>
+            {[
+              { key: "cur", label: "Password attuale",    ac: "current-password" },
+              { key: "nw",  label: "Nuova password",      ac: "new-password" },
+              { key: "nw2", label: "Conferma nuova pwd",  ac: "new-password" },
+            ].map(({ key, label, ac }) => (
+              <div key={key} style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "var(--text, #1a1a2e)" }}>{label}</label>
+                <input
+                  type="password" autoComplete={ac}
+                  value={changePwd[key]}
+                  onChange={e => setChangePwd(s => ({ ...s, [key]: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitChangePwd()}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: "1.5px solid var(--border, #d1d5db)", fontSize: 14, background: "var(--bg-input, #fff)", color: "var(--text, #1a1a2e)" }}
+                />
+              </div>
+            ))}
+            {changePwd.err && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 7, padding: "8px 12px", fontSize: 13, color: "#dc2626", marginBottom: 14, display: "flex", gap: 6, alignItems: "center" }}>
+                <Icon name="alertCircle" size={15} stroke={2} />{changePwd.err}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn--primary" onClick={submitChangePwd} disabled={changePwd.busy} style={{ flex: 1 }}>
+                {changePwd.busy ? "Attendere…" : "Aggiorna password"}
+              </button>
+              <button className="btn btn--subtle" onClick={() => setChangePwd(null)} disabled={changePwd.busy}>Annulla</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
