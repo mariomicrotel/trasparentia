@@ -25,7 +25,10 @@ async function bootstrap() {
     const r = await fetch("/api/auth/config");
     if (r.ok) {
       const cfg = await r.json();
-      if (cfg.mode === "keycloak" || cfg.enabled === true) {
+      // Keycloak solo se esplicitamente in modalità keycloak (o config legacy
+      // priva di `mode` ma con enabled:true). NON basarsi solo su enabled:true:
+      // anche la modalità native ritorna enabled:true.
+      if (cfg.mode === "keycloak" || (cfg.mode == null && cfg.enabled === true)) {
         // Keycloak: comportamento invariato
         const { initKeycloak, getTokenFreshly, getUsername, doLogout } = await import("./keycloak.js");
         await initKeycloak(cfg);

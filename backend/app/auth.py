@@ -3,24 +3,27 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from .config import settings
 from . import reference as R
 
-# ── Auth nativa: password hashing + JWT HS256 ──────────────────────────────
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ── Auth nativa: password hashing (bcrypt diretto) + JWT HS256 ─────────────
+# Uso diretto di `bcrypt` invece di passlib: passlib 1.7.4 non è compatibile
+# con bcrypt >= 4.1 (ha rimosso __about__.__version__) ed è di fatto non
+# manutenuto. bcrypt considera solo i primi 72 byte della password.
 _NATIVE_ISSUER = "trasparentia-local"
 
 
 def hash_password(plain: str) -> str:
-    return _pwd.hash(plain)
+    pw = plain.encode("utf-8")[:72]
+    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return _pwd.verify(plain, hashed)
+        return bcrypt.checkpw(plain.encode("utf-8")[:72], hashed.encode("utf-8"))
     except Exception:
         return False
 
