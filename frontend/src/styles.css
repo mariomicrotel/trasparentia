@@ -769,3 +769,16 @@ label.fld { display: block; font-size: 12.5px; font-weight: 700; color: var(--te
 .rte-render ul, .rte-render ol { padding-left: 24px; margin: 0 0 10px; }
 .rte-render blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--text-muted); margin: 0 0 10px; }
 .rte-render p { margin: 0 0 10px; }
+
+/* ── Markdown nelle bolle dell'assistente chat ────────────────────────── */
+.chat-md .md-p { margin: 0 0 8px; }
+.chat-md .md-p:last-child { margin-bottom: 0; }
+.chat-md .md-h { margin: 4px 0 6px; font-weight: 700; line-height: 1.3; }
+.chat-md h3.md-h { font-size: 15px; }
+.chat-md h4.md-h { font-size: 14px; }
+.chat-md h5.md-h { font-size: 13.5px; }
+.chat-md .md-ul, .chat-md .md-ol { margin: 0 0 8px; padding-left: 20px; }
+.chat-md .md-ul:last-child, .chat-md .md-ol:last-child { margin-bottom: 0; }
+.chat-md .md-ul li, .chat-md .md-ol li { margin: 2px 0; }
+.chat-md .md-code { font-family: "Roboto Mono", monospace; font-size: 12px; background: var(--surface-2, #eef1f5); padding: 1px 5px; border-radius: 4px; }
+.chat-md strong { font-weight: 700; }

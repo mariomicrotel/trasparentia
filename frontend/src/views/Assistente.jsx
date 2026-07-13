@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { api } from "../api.js";
 import { Icon } from "../icons.jsx";
+import { Markdown } from "../markdown.jsx";
 
 // Assistente chat globale: FAB in basso a destra + pannello. Montato in App,
 // resta disponibile su tutte le viste. Risponde su piattaforma, corpus
@@ -112,15 +113,16 @@ export default function Assistente({ me }) {
             {msgs.map((m, i) => (
               <div key={i} style={{ display: "flex", justifyContent: m.ruolo === "user" ? "flex-end" : "flex-start", marginBottom: 12 }}>
                 <div style={{ maxWidth: "85%" }}>
-                  <div style={{
-                    padding: "10px 13px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap",
+                  <div className={m.ruolo === "assistant" ? "chat-md" : undefined} style={{
+                    padding: "10px 13px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.5,
+                    whiteSpace: m.ruolo === "user" ? "pre-wrap" : "normal",
                     background: m.ruolo === "user" ? "#0066cc" : "var(--bg-card, #fff)",
                     color: m.ruolo === "user" ? "#fff" : "var(--text, #1a1a2e)",
                     border: m.ruolo === "user" ? "none" : "1px solid var(--border, #e2e5ea)",
                     borderBottomRightRadius: m.ruolo === "user" ? 3 : 12,
                     borderBottomLeftRadius: m.ruolo === "user" ? 12 : 3,
                   }}>
-                    {m.testo}
+                    {m.ruolo === "assistant" ? <Markdown text={m.testo} /> : m.testo}
                   </div>
                   {m.fonti && m.fonti.length > 0 && (
                     <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 5 }}>
