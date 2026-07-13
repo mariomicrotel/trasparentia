@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Icon } from "../icons.jsx";
 import { Badge, TimelineItem, attoNext, fmtDate } from "../ui.jsx";
+import { RichEditor, DiffView, toEditorHtml, htmlToText, looksLikeHtml } from "../richtext.jsx";
 
 const STATO_LABEL = {
   in_revisione: ["Invia in revisione", "eye"], pronta_firma: ["Contrassegna pronto per la firma", "signature"],
@@ -17,12 +18,16 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
   const [a, setA] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // editor state
+  // editor state (draft = HTML dell'editor ricco)
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [originalDraft, setOriginalDraft] = useState("");
   const [note, setNote] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
+
+  // Diff bozza AI ↔ versione rivista
+  const [aiBaseText, setAiBaseText] = useState("");   // testo della bozza AI di riferimento
+  const [showDiff, setShowDiff] = useState(false);
 
   // AI rigenera
   const [aiPanel, setAiPanel] = useState(false);
@@ -30,18 +35,8 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiModello, setAiModello] = useState("");
 
-  const textareaRef = useRef(null);
-
   function load() { return api.getAtto(id).then(setA).catch(() => setA(false)); }
   useEffect(() => { load(); }, [id]);
-
-  // auto-grow textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
-    }
-  }, [draft, editing]);
 
   if (a === false) return <div className="page"><div className="empty card"><Icon name="fileText" size={40} /><h3>Atto non trovato</h3></div></div>;
   if (!a) return <div className="page"><p>Caricamento…</p></div>;
@@ -62,8 +57,12 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
   }
 
   function startEdit() {
-    setDraft(a.contenuto || "");
-    setOriginalDraft(a.contenuto || "");
+    const html = toEditorHtml(a.contenuto || "");
+    setDraft(html);
+    setOriginalDraft(html);
+    // Se l'atto è una bozza AI non ancora modificata, quel testo è la base per il diff.
+    setAiBaseText(a.generatoAI ? htmlToText(html) : "");
+    setShowDiff(false);
     setNote("");
     setAiPanel(false);
     setIstruzioni("");
@@ -75,6 +74,7 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
     setEditing(false);
     setDraft("");
     setAiPanel(false);
+    setShowDiff(false);
   }
 
   async function saveEdit() {
@@ -94,11 +94,13 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
     setAiBusy(true);
     try {
       const res = await api.rigeneraContenuto(a.id, { istruzioni, me }, me);
-      setDraft(res.contenuto_nuovo || "");
+      const testoAI = res.contenuto_nuovo || "";
+      setDraft(toEditorHtml(testoAI));      // testo AI (semplice) → HTML per l'editor
+      setAiBaseText(testoAI);               // base di riferimento per il diff
       setAiModello(res.modello || "");
       setAiPanel(false);
       setIstruzioni("");
-      toast("Bozza rigenerata dall'AI — verifica e salva", "ai");
+      toast("Bozza rigenerata dall'AI — verifica, confronta e salva", "ai");
     } catch (e) { toast(e.message, ""); } finally { setAiBusy(false); }
   }
 
@@ -172,6 +174,17 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
                   <Icon name="sparkles" size={15} stroke={2} />
                   {aiBusy ? "AI in elaborazione…" : "Rigenera con AI"}
                 </button>
+                {aiBaseText && (
+                  <button
+                    className={"btn btn--sm " + (showDiff ? "btn--primary" : "btn--subtle")}
+                    onClick={() => setShowDiff((d) => !d)}
+                    title="Confronta la bozza AI con la tua revisione"
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    <Icon name="gitCompare" size={15} stroke={2} />
+                    {showDiff ? "Torna all'editor" : "Diff bozza AI ↔ revisione"}
+                  </button>
+                )}
                 {aiModello && (
                   <span style={{ fontSize: 11.5, color: "var(--text-faint)", fontFamily: "monospace" }}>
                     modello: {aiModello}
@@ -210,19 +223,17 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
                 </div>
               )}
 
-              <textarea
-                ref={textareaRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  minHeight: 320, padding: "14px 16px",
-                  border: "1.5px solid var(--blu)", borderRadius: 8,
-                  fontFamily: "inherit", fontSize: 14.5, lineHeight: 1.65,
-                  resize: "vertical", background: "var(--surface-1)", color: "var(--text)",
-                  outline: "none",
-                }}
-              />
+              {showDiff ? (
+                <>
+                  <div style={{ display: "flex", gap: 14, fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
+                    <span><ins className="diff-ins">testo aggiunto</ins> nella revisione</span>
+                    <span><del className="diff-del">testo rimosso</del> dalla bozza AI</span>
+                  </div>
+                  <DiffView before={aiBaseText} after={htmlToText(draft)} />
+                </>
+              ) : (
+                <RichEditor value={draft} onChange={setDraft} />
+              )}
 
               <div style={{ marginTop: 12 }}>
                 <label style={{ fontSize: 12.5, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
@@ -247,9 +258,13 @@ export default function AttoDetail({ id, M, me, nav, toast, refresh }) {
               </div>
             </div>
           ) : (
-            <div className="docview__body">
-              {(a.contenuto || "").split("\n").map((line, i) => <p key={i} style={{ whiteSpace: "pre-wrap" }}>{line || " "}</p>)}
-            </div>
+            looksLikeHtml(a.contenuto) ? (
+              <div className="docview__body rte-render" dangerouslySetInnerHTML={{ __html: a.contenuto }} />
+            ) : (
+              <div className="docview__body">
+                {(a.contenuto || "").split("\n").map((line, i) => <p key={i} style={{ whiteSpace: "pre-wrap" }}>{line || " "}</p>)}
+              </div>
+            )
           )}
 
           {!editing && a.generatoAI && (

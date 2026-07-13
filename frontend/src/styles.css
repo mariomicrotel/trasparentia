@@ -739,3 +739,33 @@ label.fld { display: block; font-size: 12.5px; font-weight: 700; color: var(--te
   }
 }
 .detgrid dd { color: var(--blu-900); display: flex; align-items: center; gap: 8px; }
+
+/* ── Editor ricco (TipTap) + diff ─────────────────────────────────────── */
+.rte { border: 1.5px solid var(--blu); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+.rte__toolbar { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.rte__btn { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 7px; border: none; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; }
+.rte__btn:hover:not(:disabled) { background: var(--blu-bg, #e8f0fb); color: var(--blu); }
+.rte__btn--active { background: var(--blu); color: #fff; }
+.rte__btn:disabled { opacity: .4; cursor: default; }
+.rte__sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.rte__content .ProseMirror { min-height: 320px; padding: 16px 18px; outline: none; font-size: 14.5px; line-height: 1.65; color: var(--text); }
+.rte__content .ProseMirror p { margin: 0 0 10px; }
+.rte__content .ProseMirror h2 { font-size: 19px; margin: 14px 0 8px; }
+.rte__content .ProseMirror h3 { font-size: 16px; margin: 12px 0 6px; }
+.rte__content .ProseMirror ul, .rte__content .ProseMirror ol { padding-left: 24px; margin: 0 0 10px; }
+.rte__content .ProseMirror blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--text-muted); margin: 0 0 10px; }
+.rte__content .ProseMirror:focus { outline: none; }
+
+.diffview { padding: 16px 18px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface-1); font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.diffview__empty { color: var(--text-muted); font-style: italic; margin-bottom: 8px; }
+.diff-ins { background: #dcfce7; color: #166534; text-decoration: none; border-radius: 3px; padding: 0 2px; }
+.diff-del { background: #fee2e2; color: #991b1b; text-decoration: line-through; border-radius: 3px; padding: 0 2px; }
+@media (prefers-color-scheme: dark) {
+  .diff-ins { background: #14532d; color: #bbf7d0; }
+  .diff-del { background: #7f1d1d; color: #fecaca; }
+}
+.rte-render h2 { font-size: 19px; margin: 16px 0 8px; }
+.rte-render h3 { font-size: 16px; margin: 12px 0 6px; }
+.rte-render ul, .rte-render ol { padding-left: 24px; margin: 0 0 10px; }
+.rte-render blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--text-muted); margin: 0 0 10px; }
+.rte-render p { margin: 0 0 10px; }
