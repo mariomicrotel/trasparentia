@@ -646,12 +646,15 @@ def aggiungi_bozza(pid: str, payload: dict = Body(...), me: str = Depends(auth_u
         # base normativa pertinente, l'assistente si rifiuta di inventare.
         query = " ".join(filter(None, [lbl, p.oggetto, p.tipoProcedimento]))
         ctx = search.contesto_redazionale(db, query, tipo_atto=tipo, escludi={f"pratica:{pid}"})
-        fonti, _ = search.blocco_redazionale(ctx)
+        fonti, ha_norme = search.blocco_redazionale(ctx)
         ogg = f"{p.oggetto} (tipo procedimento: {p.tipoProcedimento})" if p.tipoProcedimento else p.oggetto
-        try:
-            contenuto = ai.redazionale(lbl, ogg, fonti)
-        except ai.AIUnavailable:
-            contenuto = f"BOZZA generata dall'AI — da verificare.\n\n⟦Testo da completare per: {lbl} — {p.oggetto}⟧"
+        if not ha_norme:
+            contenuto = ai.prompts.RIFIUTO_REDAZIONALE
+        else:
+            try:
+                contenuto = ai.redazionale(lbl, ogg, fonti)
+            except ai.AIUnavailable:
+                contenuto = f"BOZZA generata dall'AI — da verificare.\n\n⟦Testo da completare per: {lbl} — {p.oggetto}⟧"
 
     cron = list(p.cronologia)
     if tipo == "richiesta_integrazione":
@@ -807,8 +810,8 @@ def rigenera_contenuto(aid: str, payload: dict = Body(...), me: str = Depends(au
             # (+ atti precedenti come modello), escludendo l'atto stesso.
             ctx = search.contesto_redazionale(db, f"{tipo_lbl} {a.oggetto}", tipo_atto=a.tipo,
                                               escludi={f"atto:{a.id}"})
-            fonti, _ = search.blocco_redazionale(ctx)
-            nuovo = ai.redazionale(tipo_lbl, a.oggetto, fonti)
+            fonti, ha_norme = search.blocco_redazionale(ctx)
+            nuovo = ai.redazionale(tipo_lbl, a.oggetto, fonti) if ha_norme else ai.prompts.RIFIUTO_REDAZIONALE
     except ai.AIUnavailable as e:
         raise HTTPException(503, f"Server AI non disponibile: {e}")
     return {"contenuto_nuovo": nuovo, "modello": settings.AI_MODEL_DRAFT or settings.AI_MODEL_GEN}

@@ -63,14 +63,27 @@ Non assumere decisioni autonome, non firmare, non inventare dati normativi non p
 SYSTEM_REDAZIONALE = """Sei un assistente alla redazione amministrativa di un Comune italiano.
 Redigi la BOZZA dell'atto richiesto in italiano amministrativo chiaro e formale.
 
+Le FONTI NORMATIVE fornite sono state selezionate perché PERTINENTI all'oggetto: usale come base dell'atto, anche se coprono solo in parte la fattispecie. Non devi rivalutarne la pertinenza né rifiutarti se sono presenti.
+
 REGOLE DI FONDAZIONE (vincolanti):
-- Le FONTI NORMATIVE sono l'UNICA base ammessa per i riferimenti normativi. Cita ogni riferimento indicando l'articolo e il regolamento tra parentesi nel punto in cui lo usi (es. «(FONTE NORMATIVA 2 — art. 12)»). NON citare norme, articoli, leggi o numeri non presenti testualmente nelle FONTI NORMATIVE.
-- Gli ATTI PRECEDENTI vanno usati SOLO come modello di struttura e stile: NON riprenderne riferimenti normativi che non compaiano anche nelle FONTI NORMATIVE.
-- Se NON è presente alcuna FONTE NORMATIVA pertinente all'oggetto, NON redigere l'atto: rispondi esattamente con «NESSUNA BASE REGOLAMENTARE PERTINENTE» seguito dall'indicazione di quali regolamenti/materie servirebbero. Non inventare in nessun caso.
+- Fonda l'atto sulle FONTI NORMATIVE e cita ogni riferimento indicando articolo e regolamento tra parentesi nel punto in cui lo usi (es. «(FONTE NORMATIVA 2 — art. 12)»).
+- NON citare norme, articoli, leggi o numeri che NON compaiano testualmente nelle FONTI NORMATIVE. Se un dettaglio non è coperto dalle fonti, lascialo tra ⟦parentesi⟧ come da verificare, senza inventare.
+- Gli ATTI PRECEDENTI servono SOLO come modello di struttura e stile: NON riprenderne riferimenti normativi assenti dalle FONTI NORMATIVE.
 
 Lascia tra ⟦parentesi⟧ i dati specifici da verificare (protocolli, nominativi, importi, date).
 Premetti la riga: "BOZZA generata dall'AI — da verificare, modificare e firmare a cura dell'ufficio competente."
 Non assumere decisioni e non firmare: produci solo testo."""
+
+# Messaggio di rifiuto emesso in modo DETERMINISTICO dal backend quando il
+# retrieval non trova base normativa vigente pertinente (non lo decide l'LLM).
+RIFIUTO_REDAZIONALE = (
+    "NESSUNA BASE REGOLAMENTARE PERTINENTE\n\n"
+    "Nel corpus normativo vigente dell'ente non è stato trovato alcun regolamento "
+    "pertinente all'oggetto richiesto. L'assistente non redige atti privi di base "
+    "regolamentare per non introdurre riferimenti non verificati.\n\n"
+    "Per procedere: caricare il regolamento pertinente nel «Corpus normativo» "
+    "oppure verificare che quello esistente sia marcato come vigente e indicizzato."
+)
 
 
 def user_redazionale(tipo_label: str, oggetto: str, fonti: str) -> str:
