@@ -55,6 +55,25 @@ function Stub({ title, icon, nav }) {
   );
 }
 
+// RBAC di visibilità: permessi richiesti per vedere ciascuna vista (any-of).
+// Una vista assente = sempre visibile (cruscotto, ricerca, aiuto). I permessi
+// arrivano da M.perm[utente] (derivati dal ruolo, cfr. reference.KC_ROLE_PERM).
+const VIEW_PERM = {
+  inbox:        ["classifica", "prendiCarico", "assegna", "supervisione"],
+  scadenziario: ["prendiCarico", "lavora", "assegna", "supervisione"],
+  atti:         ["bozze", "supervisione"],
+  inventario:   ["lavora", "bozze", "supervisione"],
+  uffici:       ["supervisione"],
+  regolamenti:  ["supervisione"],
+  import:       ["classifica", "supervisione"],
+  calibrazione: ["supervisione"],
+  utenti:       ["supervisione"],
+  sicurezza:    ["supervisione"],
+  config:       ["supervisione"],
+};
+// Le viste di dettaglio ereditano il permesso della loro vista "padre".
+const VIEW_PARENT = { comunicazione: "inbox", pratica: "scadenziario", atto: "atti" };
+
 export default function App({ kcEnabled = false, kcUsername = null, kcLogout = null, authMode = "demo" }) {
   // Auth nativa: utente loggato (null = non autenticato → mostra Login)
   const [nativeUser, setNativeUser] = useState(null);
@@ -180,8 +199,29 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
   const ENTE = M.ente;
   const viewProps = { me, nav, toast, refresh, tick, M, authMode };
 
+  const myPerm = M.perm?.[me] || {};
+  const canSee = (key) => {
+    const req = VIEW_PERM[VIEW_PARENT[key] || key];
+    return !req || req.some((p) => myPerm[p]);
+  };
+
   function renderView() {
     const { view, params } = route;
+    // Guardia RBAC: accesso diretto a una vista non consentita → messaggio.
+    if (!canSee(view)) {
+      return (
+        <div className="page">
+          <div className="empty card" style={{ padding: "64px 24px" }}>
+            <Icon name="lock" size={40} />
+            <h3>Accesso non consentito</h3>
+            <p>Il tuo ruolo non ha accesso a questa funzionalità.</p>
+            <button className="btn btn--subtle" onClick={() => nav("cruscotto")}>
+              <Icon name="grid" size={16} stroke={2} />Torna al cruscotto
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (view === "cruscotto") return <Cruscotto {...viewProps} />;
     if (view === "inbox") return <Inbox {...viewProps} />;
     if (view === "comunicazione") return <Comunicazione key={params.id} id={params.id} {...viewProps} />;
@@ -219,6 +259,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     { k: "utenti",       lbl: "Gestione utenti",       ico: "users" },
     { k: "sicurezza",    lbl: "Sicurezza & log",       ico: "shield" },
     { k: "config",       lbl: "Configurazione",        ico: "settings" },
+    { g: "Supporto" },
     { k: "aiuto",        lbl: "Guida & aiuto",         ico: "info" },
   ];
 
@@ -343,7 +384,12 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
 
       <div className="body">
         <nav className="sidebar">
-          {NAV.map((it, i) => it.g
+          {NAV
+            // nasconde le voci non consentite dal ruolo…
+            .filter((it) => it.g || canSee(it.k))
+            // …e le intestazioni di gruppo rimaste senza voci sotto
+            .filter((it, i, arr) => !it.g || (arr[i + 1] && !arr[i + 1].g))
+            .map((it, i) => it.g
             ? <div className="sidebar__group" key={"g" + i}>{it.g}</div>
             : <button key={it.k} className="navitem" data-active={activeKey === it.k} onClick={() => nav(it.k)}>
                 <Icon name={it.ico} size={19} stroke={1.9} />{it.lbl}
