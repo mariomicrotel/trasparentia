@@ -412,6 +412,12 @@ def ai_status(me: str = Depends(auth_user)):
     return ai.status()
 
 
+@router.get("/ai/metriche")
+def ai_metriche(me: str = Depends(auth_user)):
+    """Monitor sforzo inferenziale: VRAM/modelli caricati + serie token/s e latenze."""
+    return ai.metriche()
+
+
 @router.post("/ai/classifica")
 def ai_classifica(payload: dict = Body(...), me: str = Depends(auth_user)):
     try:

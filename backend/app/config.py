@@ -23,6 +23,8 @@ class Settings:
     AI_MODEL_DRAFT: str = os.getenv("AI_MODEL_DRAFT", "")
     AI_TIMEOUT: float = float(os.getenv("AI_TIMEOUT", "180"))
     AI_TLS_VERIFY: bool = os.getenv("AI_TLS_VERIFY", "true").lower() == "true"
+    # VRAM della GPU del server AI (GB), riferimento per il monitor (RTX 2080 = 8).
+    AI_VRAM_GB: float = float(os.getenv("AI_VRAM_GB", "8"))
 
     # Storage documenti (MinIO, S3-compatibile)
     MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")

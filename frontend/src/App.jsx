@@ -20,6 +20,7 @@ import Aiuto from "./views/Aiuto.jsx";
 import Utenti from "./views/Utenti.jsx";
 import Regolamenti from "./views/Regolamenti.jsx";
 import Assistente from "./views/Assistente.jsx";
+import MonitorAI from "./views/MonitorAI.jsx";
 import Calibrazione from "./views/Calibrazione.jsx";
 import Uffici from "./views/Uffici.jsx";
 
@@ -66,6 +67,7 @@ const VIEW_PERM = {
   inventario:   ["lavora", "bozze", "supervisione"],
   uffici:       ["supervisione"],
   regolamenti:  ["supervisione"],
+  monitorai:    ["supervisione"],
   import:       ["classifica", "supervisione"],
   calibrazione: ["supervisione"],
   utenti:       ["supervisione"],
@@ -238,6 +240,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     if (view === "aiuto") return <Aiuto {...viewProps} />;
     if (view === "utenti") return <Utenti {...viewProps} />;
     if (view === "regolamenti") return <Regolamenti {...viewProps} />;
+    if (view === "monitorai") return <MonitorAI {...viewProps} />;
     if (view === "calibrazione") return <Calibrazione {...viewProps} />;
     if (view === "uffici") return <Uffici {...viewProps} />;
     return <Stub title="Modulo" icon="grid" nav={nav} />;
@@ -257,6 +260,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     { k: "regolamenti",  lbl: "Corpus normativo",      ico: "gavel" },
     { k: "import",       lbl: "Importazione massiva",  ico: "upload" },
     { k: "calibrazione", lbl: "Calibrazione AI",       ico: "sliders" },
+    { k: "monitorai",    lbl: "Monitor AI",            ico: "activity" },
     { k: "utenti",       lbl: "Gestione utenti",       ico: "users" },
     { k: "sicurezza",    lbl: "Sicurezza & log",       ico: "shield" },
     { k: "config",       lbl: "Configurazione",        ico: "settings" },

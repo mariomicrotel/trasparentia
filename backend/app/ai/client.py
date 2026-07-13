@@ -3,6 +3,9 @@ errori: se il server/modello non è raggiungibile, solleva AIUnavailable e il
 chiamante può ricadere sulla proposta già presente (human-in-the-loop)."""
 import json
 import re
+import time as _time
+from collections import deque
+
 import httpx
 
 from ..config import settings
@@ -10,6 +13,29 @@ from ..reference import CAT
 from . import prompts
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+# Serie temporale delle ultime inferenze per il monitor di sforzo inferenziale.
+# Ogni campione deriva dai timing restituiti da Ollama (token/s, latenza).
+_METRICHE: deque = deque(maxlen=90)
+
+
+def _registra_metrica(kind: str, model: str, data: dict) -> None:
+    """Estrae i timing dalla risposta Ollama e li accoda alla serie del monitor."""
+    try:
+        ev = data.get("eval_count") or 0
+        evd = data.get("eval_duration") or 0          # durata generazione (ns)
+        pev = data.get("prompt_eval_count") or 0
+        tot = data.get("total_duration") or 0          # durata totale (ns)
+        load = data.get("load_duration") or 0          # caricamento modello (ns)
+        tps = round(ev / (evd / 1e9), 1) if evd else 0.0
+        _METRICHE.append({
+            "ts": _time.time(), "kind": kind, "model": model,
+            "tokens_s": tps, "eval_count": ev, "prompt_tokens": pev,
+            "total_ms": int(tot / 1e6) if tot else None,
+            "load_ms": int(load / 1e6) if load else 0,
+        })
+    except Exception:
+        pass
 
 # Client persistente: riusa le connessioni TCP verso il server AI (RTT ridotto, meno overhead TLS).
 # max_connections=4 basta per un Comune piccolo (un solo worker GPU attivo alla volta).
@@ -72,7 +98,9 @@ def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = No
         r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
                              headers=_headers(), timeout=settings.AI_TIMEOUT)
         r.raise_for_status()
-        content = r.json()["message"]["content"]
+        data = r.json()
+        _registra_metrica("classifica" if fmt_json else "generazione", mdl, data)
+        content = data["message"]["content"]
         # rimuove eventuali blocchi di reasoning residui (<think>…</think>) lasciati dal modello
         return _THINK_RE.sub("", content).strip()
     except Exception as e:  # connessione, timeout, modello assente, ecc.
@@ -98,7 +126,9 @@ def _chat_messages(system: str, messages: list[dict], model: str | None = None,
         r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
                              headers=_headers(), timeout=settings.AI_TIMEOUT)
         r.raise_for_status()
-        return _THINK_RE.sub("", r.json()["message"]["content"]).strip()
+        data = r.json()
+        _registra_metrica("assistente", mdl, data)
+        return _THINK_RE.sub("", data["message"]["content"]).strip()
     except Exception as e:
         raise AIUnavailable(str(e))
 
@@ -134,6 +164,30 @@ def status() -> dict:
     except Exception as e:
         return {"ok": False, "online": False, "base_url": settings.OLLAMA_BASE_URL, "model": settings.AI_MODEL_GEN,
                 "model_available": False, "error": str(e)}
+
+
+def metriche() -> dict:
+    """Snapshot per il monitor di sforzo inferenziale: stato VRAM/modelli caricati
+    (live da /api/ps) + serie temporale delle ultime inferenze (token/s, latenza)."""
+    out = {"online": False, "base_url": settings.OLLAMA_BASE_URL,
+           "vram_totale_gb": settings.AI_VRAM_GB, "campioni": list(_METRICHE)}
+    try:
+        r = _get_http().get(f"{settings.OLLAMA_BASE_URL}/api/ps", headers=_headers(), timeout=5)
+        r.raise_for_status()
+        ms = r.json().get("models", [])
+        vram = sum(m.get("size_vram", 0) or 0 for m in ms)
+        out["online"] = True
+        out["modelli"] = [{"name": m.get("name"), "vram_bytes": m.get("size_vram", 0) or 0,
+                           "context_length": m.get("context_length"),
+                           "expires_at": m.get("expires_at")} for m in ms]
+        out["vram_bytes"] = vram
+        out["vram_gb"] = round(vram / 1e9, 2)
+    except Exception as e:
+        out["errore"] = str(e)
+        out["modelli"] = []
+        out["vram_bytes"] = 0
+        out["vram_gb"] = 0.0
+    return out
 
 
 def test_inference() -> dict:

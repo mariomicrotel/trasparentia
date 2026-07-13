@@ -82,6 +82,7 @@ export const api = {
 
   meta: () => req("GET", "/api/meta"),
   aiStatus: () => req("GET", "/api/ai/status"),
+  aiMetriche: (me) => req("GET", "/api/ai/metriche", null, me),
   aiClassifica: (payload) => req("POST", "/api/ai/classifica", payload),
 
   listCom: () => req("GET", "/api/comunicazioni"),
