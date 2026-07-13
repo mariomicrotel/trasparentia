@@ -114,18 +114,31 @@ def ingest(db, titolo: str, testo: str, materia: str | None = None,
         if fonte:
             reg.fonte = fonte
 
-    n_chunk = 0
+    # Contatore GLOBALE per l'id: garantisce l'unicità anche quando lo stesso
+    # numero di articolo compare più volte (es. sommario/indice del PDF + corpo,
+    # o numerazioni ripetute). L'articolo resta come metadato (può ripetersi).
+    n_chunk, seq, articoli_validi = 0, 0, set()
     for art in articoli:
-        for i, pezzo in enumerate(_chunks_per_articolo(art)):
-            cid = f"{reg_id}:art_{art['articolo'] or 'na'}#{i}"
+        for pezzo in _chunks_per_articolo(art):
+            pezzo = (pezzo or "").strip()
+            if len(pezzo) < 25:
+                continue  # scarta frammenti/righe di sommario e rumore OCR
+            cid = f"{reg_id}:art_{art['articolo'] or 'na'}#{seq}"
+            seq += 1
             db.add(models.NormaChunk(
                 id=cid, regolamentoId=reg_id, regolamento=titolo,
                 articolo=art["articolo"], rubrica=art["rubrica"],
                 materia=materia, vigente=True, testo=pezzo,
             ))
             n_chunk += 1
+            if art["articolo"]:
+                articoli_validi.add(art["articolo"])
 
-    reg.nArticoli = sum(1 for a in articoli if a["articolo"])
+    if n_chunk == 0:
+        raise ValueError("Nessun contenuto normativo utile estratto dal file "
+                         "(possibile PDF scansionato senza testo o solo sommario)")
+
+    reg.nArticoli = len(articoli_validi)
     db.commit()
 
     embeddati = 0
