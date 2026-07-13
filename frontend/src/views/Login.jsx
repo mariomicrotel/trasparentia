@@ -90,10 +90,11 @@ export default function Login({ onLogin }) {
           )}
 
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Email istituzionale</label>
+            <label style={labelStyle}>{isSetup ? "Email istituzionale" : "Email o username"}</label>
             <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="nome@comune.it" required autoFocus={!isSetup}
+              type={isSetup ? "email" : "text"} value={email} onChange={e => setEmail(e.target.value)}
+              placeholder={isSetup ? "nome@comune.it" : "nome@comune.it oppure nome_utente"}
+              required autoFocus={!isSetup}
               autoComplete="username"
               style={inputStyle}
             />

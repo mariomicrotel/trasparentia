@@ -241,15 +241,17 @@ def auth_setup(payload: dict = Body(...), db: Session = Depends(get_db)):
 
 @router.post("/auth/login")
 def auth_login(payload: dict = Body(...), db: Session = Depends(get_db)):
-    """Login con email e password. Restituisce un JWT locale."""
+    """Login con email o username + password. Restituisce un JWT locale."""
     if not settings.NATIVE_AUTH_ENABLED:
         raise HTTPException(400, "Auth nativa non abilitata")
-    email = (payload.get("email") or "").strip().lower()
+    # Accetta sia l'email che lo username (id). Compatibile con il vecchio
+    # payload che usava la chiave "email".
+    ident = (payload.get("email") or payload.get("username") or "").strip().lower()
     password = payload.get("password") or ""
-    if not email or not password:
-        raise HTTPException(400, "Email e password obbligatori")
+    if not ident or not password:
+        raise HTTPException(400, "Credenziali obbligatorie")
     u = db.query(models.Utente).filter(
-        models.Utente.email == email,
+        or_(models.Utente.email == ident, models.Utente.id == ident),
         models.Utente.attivo == True,  # noqa: E712
     ).first()
     if not u or not u.password_hash or not auth_module.verify_password(password, u.password_hash):
