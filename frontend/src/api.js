@@ -181,6 +181,9 @@ export const api = {
     return upload("/api/beni/import-csv", fd, me);
   },
 
+  // assistente chat globale (RAG)
+  assistente: (domanda, storia, me) => req("POST", "/api/assistente", { domanda, storia }, me),
+
   // corpus normativo (assistente redazionale RAG)
   normativaLista: (me) => req("GET", "/api/normativa", null, me),
   normativaImportFile: (file, titolo, materia, me) => {

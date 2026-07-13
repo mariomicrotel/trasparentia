@@ -19,6 +19,7 @@ import Import from "./views/Import.jsx";
 import Aiuto from "./views/Aiuto.jsx";
 import Utenti from "./views/Utenti.jsx";
 import Regolamenti from "./views/Regolamenti.jsx";
+import Assistente from "./views/Assistente.jsx";
 import Calibrazione from "./views/Calibrazione.jsx";
 import Uffici from "./views/Uffici.jsx";
 
@@ -414,6 +415,8 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
           </div>
         ))}
       </div>
+
+      <Assistente me={me} />
 
       {changePwd && (
         <div style={{

@@ -1128,6 +1128,50 @@ def normativa_embed_pending(me: str = Depends(auth_user), db: Session = Depends(
     return {"embeddati": n, **normativa_module.status(db)}
 
 
+# ---------- assistente chat globale (RAG su piattaforma + norme + dati) ----------
+@router.post("/assistente")
+def assistente(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Q&A conversazionale: recupera contesto da corpus normativo + indice
+    operativo e risponde fondandosi su di esso (+ guida statica alla piattaforma)."""
+    domanda = (payload.get("domanda") or "").strip()
+    if not domanda:
+        raise HTTPException(400, "Domanda mancante")
+    storia = payload.get("storia") or []
+
+    # Retrieval ibrido (lessicale+semantico): allega SOLO fonti realmente
+    # pertinenti. Per una domanda generica sulla piattaforma si risponde con la
+    # sola guida, senza attaccare regolamenti/atti a caso.
+    norme = search.contesto_normativo_ibrido(db, domanda, k=4)
+    # Operativi: semantica ravvicinata, poi tieni solo chi contiene un termine
+    # della domanda a PAROLA INTERA (evita atti/comunicazioni non pertinenti e
+    # i falsi match a sottostringa).
+    import re as _re
+    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in search._termini(domanda)]
+    generali = []
+    for g in search.contesto_per(db, domanda, k=4, max_dist=0.34):
+        blob = f"{g['titolo']} {g['testo']}".lower()
+        if any(p.search(blob) for p in pats):
+            g["tipo"] = "operativo"
+            generali.append(g)
+        if len(generali) >= 3:
+            break
+
+    parti, fonti = [], []
+    for i, p in enumerate(norme):
+        parti.append(f"[FONTE NORMATIVA {i + 1} — {p['titolo']} ({p['rif']})]\n{p['testo']}")
+        fonti.append({"titolo": p["titolo"], "rif": p["rif"], "tipo": "normativa"})
+    for i, p in enumerate(generali):
+        parti.append(f"[DATO OPERATIVO {i + 1} — {p['titolo']} ({p['rif']})]\n{p['testo']}")
+        fonti.append({"titolo": p["titolo"], "rif": p["rif"], "tipo": "operativo"})
+    contesto = "\n\n".join(parti)
+
+    try:
+        risposta = ai.assistente(domanda, storia, contesto)
+    except ai.AIUnavailable as e:
+        raise HTTPException(503, f"Assistente non disponibile: il server AI non risponde ({e})")
+    return {"risposta": risposta, "fonti": fonti}
+
+
 # ---------- cruscotto ----------
 def _is_ritardo(p):
     if not p.scadenza:

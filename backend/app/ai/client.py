@@ -79,6 +79,44 @@ def _chat(system: str, user: str, fmt_json: bool = False, model: str | None = No
         raise AIUnavailable(str(e))
 
 
+def _chat_messages(system: str, messages: list[dict], model: str | None = None,
+                   num_predict: int | None = None) -> str:
+    """Come _chat ma con storia conversazionale multi-turn (lista di
+    {"role","content"}). Usato dall'assistente chat globale."""
+    mdl = model or settings.AI_MODEL_GEN
+    if "qwen3" in mdl.lower():
+        system = (system or "") + "\n/no_think"
+    options = {"temperature": 0.2}
+    if num_predict:
+        options["num_predict"] = num_predict
+    payload = {
+        "model": mdl,
+        "messages": [{"role": "system", "content": system}] + messages,
+        "stream": False, "think": False, "keep_alive": "30m", "options": options,
+    }
+    try:
+        r = _get_http().post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload,
+                             headers=_headers(), timeout=settings.AI_TIMEOUT)
+        r.raise_for_status()
+        return _THINK_RE.sub("", r.json()["message"]["content"]).strip()
+    except Exception as e:
+        raise AIUnavailable(str(e))
+
+
+def assistente(domanda: str, storia: list[dict], contesto: str) -> str:
+    """Assistente chat globale: risponde su piattaforma + corpus normativo + dati
+    operativi, fondandosi sul contesto recuperato (RAG). `storia` = turni recenti
+    [{"ruolo","testo"}]. Il contesto è iniettato sull'ultima domanda."""
+    msgs = []
+    for t in (storia or [])[-6:]:
+        role = "assistant" if t.get("ruolo") == "assistant" else "user"
+        testo = (t.get("testo") or "").strip()
+        if testo:
+            msgs.append({"role": role, "content": testo})
+    msgs.append({"role": "user", "content": prompts.user_assistente(domanda, contesto)})
+    return _chat_messages(prompts.SYSTEM_ASSISTENTE, msgs, num_predict=900)
+
+
 def _draft_model() -> str:
     """Modello da usare per la redazione/revisione atti. Priorità: AI_MODEL_DRAFT > AI_MODEL_GEN."""
     return settings.AI_MODEL_DRAFT or settings.AI_MODEL_GEN

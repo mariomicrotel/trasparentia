@@ -112,13 +112,15 @@ def _result(db, row):
 # ---------- RAG: recupero del contesto per la generazione assistita ----------
 
 def contesto_per(db, query: str, k: int = 4, escludi: set[str] | None = None,
-                 max_char: int = 1200, budget_char: int = 4000) -> list[dict]:
+                 max_char: int = 1200, budget_char: int = 4000,
+                 max_dist: float | None = None) -> list[dict]:
     """Recupera fino a k passaggi pertinenti dall'Indice (ricerca semantica) per
     fondare la generazione di una bozza/risposta. Un solo chunk per fonte (diversità)
     e un tetto complessivo `budget_char` per tenere il contesto snello → generazione
     più rapida sull'hardware locale. `escludi` contiene chiavi «tipo:id» di fonti da
-    saltare (es. il record stesso). Ritorna [] se l'embedding non è disponibile
-    (AI offline o indice non embeddato): la generazione procede comunque senza fonti."""
+    saltare (es. il record stesso). Con `max_dist` scarta i passaggi oltre quella
+    distanza coseno (evita di allegare fonti non pertinenti, es. nell'assistente).
+    Ritorna [] se l'embedding non è disponibile (AI offline o indice non embeddato)."""
     query = (query or "").strip()
     if not query:
         return []
@@ -129,13 +131,16 @@ def contesto_per(db, query: str, k: int = 4, escludi: set[str] | None = None,
     if not qv or len(qv) != settings.EMBED_DIM:
         return []
     escludi = escludi or set()
+    dist = models.Indice.embedding.cosine_distance(qv)
     # Sovra-campiona: i chunk della stessa fonte vanno deduplicati a valle.
-    rows = (db.query(models.Indice)
+    rows = (db.query(models.Indice, dist.label("dist"))
               .filter(models.Indice.embedding.is_not(None))
-              .order_by(models.Indice.embedding.cosine_distance(qv))
+              .order_by(dist)
               .limit(k * 5 + len(escludi) * 3).all())
     passaggi, visti, tot = [], set(), 0
-    for r in rows:
+    for r, d in rows:
+        if max_dist is not None and d is not None and d > max_dist:
+            break  # ordinati per distanza: da qui in poi non pertinenti
         src = f"{r.refTipo}:{r.refId}"
         if src in escludi or src in visti:
             continue
@@ -161,6 +166,73 @@ def blocco_fonti(passaggi: list[dict]) -> str:
         f"[FONTE {i + 1} — {p['titolo']} ({p['rif']})]\n{p['testo']}"
         for i, p in enumerate(passaggi)
     )
+
+
+# ---------- Retrieval lessicale (robusto per query con parole-chiave) ----------
+import re as _re
+
+_STOP = {"il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "del", "dello",
+         "della", "dei", "degli", "delle", "dell", "e", "ed", "o", "che", "chi", "come",
+         "cosa", "quale", "quali", "quando", "quanto", "per", "con", "su", "in", "a", "al",
+         "allo", "alla", "ai", "agli", "alle", "da", "dal", "è", "sono", "essere", "fare",
+         "mi", "si", "ci", "non", "più", "me", "tra", "fra", "questo", "questa"}
+
+
+def _termini(query: str) -> list[str]:
+    toks = _re.findall(r"[a-zA-Zàèéìòùáí0-9]{3,}", (query or "").lower())
+    return [t for t in toks if t not in _STOP]
+
+
+def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[dict]:
+    """Ricerca lessicale nel corpus normativo vigente: match dei termini della
+    domanda su testo/rubrica/titolo, ordinati per numero di termini presenti.
+    Robusta dove la semantica fallisce (nomi di regolamenti, sigle come «IMU»)."""
+    termini = _termini(query)
+    if not termini:
+        return []
+    conds = [or_(models.NormaChunk.testo.ilike(f"%{t}%"),
+                 models.NormaChunk.rubrica.ilike(f"%{t}%"),
+                 models.NormaChunk.regolamento.ilike(f"%{t}%")) for t in termini]
+    rows = (db.query(models.NormaChunk)
+              .filter(models.NormaChunk.vigente == True, or_(*conds))  # noqa: E712
+              .limit(80).all())
+
+    # Scoring per CONFINE DI PAROLA: l'ILIKE è solo un prefiltro grezzo (a
+    # sottostringa: «funziona» aggancerebbe «funzionario»). Qui contiamo solo i
+    # match a parola intera, per non allegare regolamenti a sproposito.
+    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in termini]
+
+    def score(r):
+        blob = f"{r.regolamento} {r.rubrica or ''} {r.testo}".lower()
+        return sum(1 for p in pats if p.search(blob))
+
+    rows.sort(key=score, reverse=True)
+    out, visti = [], set()
+    for r in rows:
+        key = (r.regolamentoId, r.articolo)
+        if key in visti or score(r) == 0:
+            continue
+        visti.add(key)
+        rif = f"art. {r.articolo}" if r.articolo else "testo"
+        titolo = f"{r.regolamento} — {rif}" + (f" ({r.rubrica})" if r.rubrica else "")
+        out.append({"rif": f"{r.regolamentoId}:{r.articolo or 'na'}", "titolo": titolo,
+                    "testo": (r.testo or "").strip()[:max_char], "tipo": "normativa"})
+        if len(out) >= k:
+            break
+    return out
+
+
+def contesto_normativo_ibrido(db, query: str, k: int = 5) -> list[dict]:
+    """Lessicale-primario: se i termini della domanda combaciano con un
+    regolamento (nomi/sigle come «IMU», «suolo pubblico») usa quei match, che
+    sono precisi. Solo se la lessicale è vuota ricade su una semantica MOLTO
+    stretta. Evita di allegare regolamenti a caso a domande di piattaforma.
+    Usata dall'assistente, dove la precisione delle fonti mostrate è cruciale."""
+    lex = norme_lessicali(db, query, k=k)
+    if lex:
+        return lex[:k]
+    # Nessun aggancio lessicale: fallback semantico stretto (o niente).
+    return contesto_normativo(db, query, k=k, best_floor=0.27, spread=0.05)
 
 
 # ---------- RAG normativo: fondazione sui regolamenti dell'ente ----------
