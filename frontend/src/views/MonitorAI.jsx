@@ -97,6 +97,9 @@ export default function MonitorAI({ M, me }) {
   const oraS = Date.now() / 1000;
   const ultimoMinuto = campioni.filter((c) => oraS - c.ts < 60).length;
   const online = d?.online;
+  const kpi = d?.kpi || {};
+  const genModel = (d?.modelli || []).find((m) => m.is_gen);
+  const fmtKeep = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
 
   return (
     <div className="page">
@@ -122,41 +125,59 @@ export default function MonitorAI({ M, me }) {
         </div>
       )}
 
-      {/* Stat tiles */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <Stat label="VRAM occupata" value={d ? d.vram_gb : "—"} unit={`/ ${d?.vram_totale_gb ?? "?"} GB`}
-              tone={d && d.vram_gb / (d.vram_totale_gb || 8) > 0.9 ? "var(--rosso)" : "var(--blu)"} />
-        <Stat label="Modelli in VRAM" value={d ? (d.modelli?.length ?? 0) : "—"} unit="" />
-        <Stat label="Token/s ultima" value={ultima ? ultima.tokens_s : "—"} unit={ultima ? "tok/s" : ""} tone="var(--verde)" />
-        <Stat label="Latenza ultima" value={ultima?.total_ms ? (ultima.total_ms / 1000).toFixed(1) : "—"} unit={ultima?.total_ms ? "s" : ""} />
-        <Stat label="Inferenze (60s)" value={ultimoMinuto} unit="" />
-      </div>
-
-      {/* VRAM nel tempo */}
+      {/* ── Scheda video / VRAM ─────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card__head">
           <Icon name="cpu" size={18} stroke={2} style={{ color: "var(--blu)" }} />
-          <h3 style={{ flex: 1 }}>VRAM occupata nel tempo</h3>
-          <span className="sub">{d ? `${vramSerie.current[vramSerie.current.length - 1] ?? 0}%` : ""}</span>
+          <h3 style={{ flex: 1 }}>Scheda video · VRAM ({d?.vram_totale_gb ?? "?"} GB)</h3>
+          <span className="sub">{d ? `${d.vram_pct ?? 0}% occupata` : ""}</span>
         </div>
         <div className="card__body">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <Stat label="VRAM occupata" value={d ? d.vram_gb : "—"} unit="GB"
+                  tone={d && d.vram_pct > 90 ? "var(--rosso)" : "var(--blu)"} />
+            <Stat label="VRAM libera" value={d ? d.vram_libera_gb : "—"} unit="GB" tone="var(--verde)" />
+            <Stat label="Occupazione" value={d ? d.vram_pct : "—"} unit="%"
+                  tone={d && d.vram_pct > 90 ? "var(--rosso)" : "var(--text)"} />
+            <Stat label="Modelli in VRAM" value={d ? (d.modelli?.length ?? 0) : "—"} unit="" />
+            <Stat label="Modello generativo" value={d ? (d.gen_residente ? "caldo" : "da caricare") : "—"} unit=""
+                  tone={d?.gen_residente ? "var(--verde)" : "var(--arancio, #c2610c)"} />
+            <Stat label="Keep-alive gen" value={genModel ? fmtKeep(genModel.keepalive_sec) : "—"} unit="" />
+          </div>
           <AreaChart punti={vramSerie.current} max={100} unit="%" />
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+            <Icon name="info" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
+            {d?.gpu_note || "Utilizzo GPU, temperatura e consumo non sono esposti dall'API Ollama."}
+          </div>
         </div>
       </div>
 
-      {/* Throughput inferenze */}
+      {/* ── Prestazioni inferenza ───────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card__head">
           <Icon name="activity" size={18} stroke={2} style={{ color: "var(--blu)" }} />
-          <h3 style={{ flex: 1 }}>Throughput inferenze (token/s)</h3>
-          <span className="sub">ultime {campioni.length}</span>
+          <h3 style={{ flex: 1 }}>Prestazioni inferenza</h3>
+          <span className="sub">{kpi.n ? `${kpi.n} campioni` : ""}</span>
         </div>
         <div className="card__body">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <Stat label="Generazione media" value={kpi.tps_medio ?? "—"} unit="tok/s" tone="var(--verde)" />
+            <Stat label="Generazione picco" value={kpi.tps_max ?? "—"} unit="tok/s" />
+            <Stat label="Prefill prompt" value={kpi.prompt_tps_medio ?? "—"} unit="tok/s" tone="var(--blu)" />
+            <Stat label="Latenza media" value={kpi.latenza_media_ms ? (kpi.latenza_media_ms / 1000).toFixed(1) : "—"} unit={kpi.latenza_media_ms ? "s" : ""} />
+            <Stat label="Latenza max" value={kpi.latenza_max_ms ? (kpi.latenza_max_ms / 1000).toFixed(1) : "—"} unit={kpi.latenza_max_ms ? "s" : ""} />
+            <Stat label="Token generati" value={kpi.token_generati ?? "—"} unit="" />
+            <Stat label="Cold start" value={kpi.cold_start ?? "—"} unit="" tone={kpi.cold_start > 0 ? "var(--arancio, #c2610c)" : "var(--text)"} />
+            <Stat label="Inferenze (60s)" value={ultimoMinuto} unit="" />
+          </div>
           <BarsChart campioni={campioni} />
-          <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 12, color: "var(--text-muted)" }}>
-            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#6a4ec2", marginRight: 5 }} />classificazione</span>
-            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#0066cc", marginRight: 5 }} />generazione atti</span>
-            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#0b7d99", marginRight: 5 }} />assistente</span>
+          <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 12, color: "var(--text-muted)", flexWrap: "wrap" }}>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#6a4ec2", marginRight: 5 }} />classificazione {kpi.per_tipo?.classifica ? `(${kpi.per_tipo.classifica})` : ""}</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#0066cc", marginRight: 5 }} />generazione atti {kpi.per_tipo?.generazione ? `(${kpi.per_tipo.generazione})` : ""}</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "#0b7d99", marginRight: 5 }} />assistente {kpi.per_tipo?.assistente ? `(${kpi.per_tipo.assistente})` : ""}</span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+            Il <b>prefill</b> è la velocità di lettura del prompt (molto alta); la <b>generazione</b> è la scrittura della risposta (più lenta, è il vero collo di bottiglia). Prompt lunghi (RAG) pesano sul prefill.
           </div>
         </div>
       </div>
@@ -171,9 +192,13 @@ export default function MonitorAI({ M, me }) {
               <div key={m.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
                 <Icon name="cpu" size={18} stroke={2} style={{ color: "var(--blu)", flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13.5, fontFamily: "monospace" }}>{m.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 8 }}>
+                    {m.name}
+                    {m.is_gen && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "var(--verde-bg, #e6f4ea)", color: "var(--verde)" }}>GENERATIVO</span>}
+                  </div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                     {(m.vram_bytes / 1e9).toFixed(2)} GB{m.context_length ? ` · contesto ${m.context_length}` : ""}
+                    {m.keepalive_sec != null ? ` · si scarica tra ${fmtKeep(m.keepalive_sec)}` : ""}
                   </div>
                 </div>
                 <div style={{ width: 120, height: 6, borderRadius: 3, background: "var(--border)", overflow: "hidden", flexShrink: 0 }}>

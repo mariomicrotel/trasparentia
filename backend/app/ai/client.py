@@ -25,12 +25,15 @@ def _registra_metrica(kind: str, model: str, data: dict) -> None:
         ev = data.get("eval_count") or 0
         evd = data.get("eval_duration") or 0          # durata generazione (ns)
         pev = data.get("prompt_eval_count") or 0
+        pevd = data.get("prompt_eval_duration") or 0  # durata prefill prompt (ns)
         tot = data.get("total_duration") or 0          # durata totale (ns)
         load = data.get("load_duration") or 0          # caricamento modello (ns)
         tps = round(ev / (evd / 1e9), 1) if evd else 0.0
+        ptps = round(pev / (pevd / 1e9), 1) if pevd else 0.0
         _METRICHE.append({
             "ts": _time.time(), "kind": kind, "model": model,
-            "tokens_s": tps, "eval_count": ev, "prompt_tokens": pev,
+            "tokens_s": tps, "prompt_tokens_s": ptps,
+            "eval_count": ev, "prompt_tokens": pev,
             "total_ms": int(tot / 1e6) if tot else None,
             "load_ms": int(load / 1e6) if load else 0,
         })
@@ -166,11 +169,55 @@ def status() -> dict:
                 "model_available": False, "error": str(e)}
 
 
+def _keepalive_sec(expires_at: str | None) -> int | None:
+    """Secondi rimanenti prima che il modello venga scaricato dalla VRAM."""
+    if not expires_at:
+        return None
+    try:
+        from datetime import datetime, timezone
+        s = re.sub(r"(\.\d{6})\d+", r"\1", expires_at)  # tronca a microsecondi
+        exp = datetime.fromisoformat(s)
+        return max(0, int((exp - datetime.now(timezone.utc)).total_seconds()))
+    except Exception:
+        return None
+
+
+def _aggrega(campioni: list[dict]) -> dict:
+    """KPI aggregati sulle inferenze recenti (media/max, prefill, cold start, totali)."""
+    if not campioni:
+        return {"n": 0}
+    tps = [c["tokens_s"] for c in campioni if c.get("tokens_s")]
+    ptps = [c["prompt_tokens_s"] for c in campioni if c.get("prompt_tokens_s")]
+    lat = [c["total_ms"] for c in campioni if c.get("total_ms")]
+    cold = [c for c in campioni if (c.get("load_ms") or 0) > 500]
+    per_tipo = {}
+    for c in campioni:
+        per_tipo[c["kind"]] = per_tipo.get(c["kind"], 0) + 1
+    med = lambda xs: round(sum(xs) / len(xs), 1) if xs else 0.0
+    return {
+        "n": len(campioni),
+        "tps_medio": med(tps), "tps_max": max(tps) if tps else 0.0,
+        "prompt_tps_medio": med(ptps),
+        "latenza_media_ms": int(med(lat)) if lat else 0,
+        "latenza_max_ms": max(lat) if lat else 0,
+        "token_generati": sum(c.get("eval_count", 0) for c in campioni),
+        "prompt_tokens_tot": sum(c.get("prompt_tokens", 0) for c in campioni),
+        "cold_start": len(cold), "ultimo_load_ms": campioni[-1].get("load_ms", 0),
+        "per_tipo": per_tipo,
+    }
+
+
 def metriche() -> dict:
     """Snapshot per il monitor di sforzo inferenziale: stato VRAM/modelli caricati
-    (live da /api/ps) + serie temporale delle ultime inferenze (token/s, latenza)."""
+    (live da /api/ps) + serie temporale e KPI aggregati delle inferenze."""
+    campioni = list(_METRICHE)
+    gen_base = settings.AI_MODEL_GEN.split(":")[0]
     out = {"online": False, "base_url": settings.OLLAMA_BASE_URL,
-           "vram_totale_gb": settings.AI_VRAM_GB, "campioni": list(_METRICHE)}
+           "vram_totale_gb": settings.AI_VRAM_GB, "campioni": campioni,
+           "kpi": _aggrega(campioni),
+           # Telemetria GPU (utilizzo %, temperatura, consumo) NON disponibile via
+           # API Ollama: richiede un exporter (nvidia-smi) sul server AI.
+           "gpu_note": "Utilizzo GPU, temperatura e consumo non sono esposti dall'API Ollama: richiedono un exporter (nvidia-smi) sul server AI."}
     try:
         r = _get_http().get(f"{settings.OLLAMA_BASE_URL}/api/ps", headers=_headers(), timeout=5)
         r.raise_for_status()
@@ -179,14 +226,21 @@ def metriche() -> dict:
         out["online"] = True
         out["modelli"] = [{"name": m.get("name"), "vram_bytes": m.get("size_vram", 0) or 0,
                            "context_length": m.get("context_length"),
-                           "expires_at": m.get("expires_at")} for m in ms]
+                           "keepalive_sec": _keepalive_sec(m.get("expires_at")),
+                           "is_gen": gen_base in (m.get("name") or "")} for m in ms]
         out["vram_bytes"] = vram
         out["vram_gb"] = round(vram / 1e9, 2)
+        out["vram_libera_gb"] = round(max(0.0, settings.AI_VRAM_GB - vram / 1e9), 2)
+        out["vram_pct"] = round(vram / 1e9 / settings.AI_VRAM_GB * 100) if settings.AI_VRAM_GB else 0
+        out["gen_residente"] = any(m["is_gen"] for m in out["modelli"])
     except Exception as e:
         out["errore"] = str(e)
         out["modelli"] = []
         out["vram_bytes"] = 0
         out["vram_gb"] = 0.0
+        out["vram_libera_gb"] = settings.AI_VRAM_GB
+        out["vram_pct"] = 0
+        out["gen_residente"] = False
     return out
 
 
