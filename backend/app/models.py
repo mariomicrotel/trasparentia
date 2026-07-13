@@ -108,6 +108,44 @@ class Indice(Base):
         return {"id": self.id, "refTipo": self.refTipo, "refId": self.refId, "titolo": self.titolo}
 
 
+class Regolamento(Base):
+    """Fonte normativa adottata dall'ente (regolamento, delibera, statuto...).
+    Il testo vero e proprio vive nei `NormaChunk` (uno per articolo/segmento)."""
+    __tablename__ = "regolamenti"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # slug
+    titolo: Mapped[str] = mapped_column(Text)
+    materia: Mapped[str | None] = mapped_column(String, nullable=True)   # es. "urbanistica"
+    fonte: Mapped[str | None] = mapped_column(String, nullable=True)     # "pdf:nome" | "docx:nome" | "url:..." | "manuale"
+    vigente: Mapped[bool] = mapped_column(Boolean, default=True)
+    nArticoli: Mapped[int] = mapped_column(default=0)
+    creato: Mapped[str] = mapped_column(String)
+    aggiornato: Mapped[str] = mapped_column(String)
+
+    def dict(self):
+        return _to_dict(self)
+
+
+class NormaChunk(Base):
+    """Segmento indicizzabile di una fonte normativa. Il chunking è per ARTICOLO
+    (quando riconoscibile) così il retrieval e la citazione sono a grana d'articolo.
+    `embedding` popolato best-effort come per l'Indice."""
+    __tablename__ = "norma_chunks"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # "<regId>:art_<n>#<i>"
+    regolamentoId: Mapped[str] = mapped_column(String)
+    regolamento: Mapped[str] = mapped_column(Text)             # titolo denormalizzato (per citazione)
+    articolo: Mapped[str | None] = mapped_column(String, nullable=True)   # "12", "12-bis"
+    rubrica: Mapped[str | None] = mapped_column(Text, nullable=True)      # titolo dell'articolo
+    materia: Mapped[str | None] = mapped_column(String, nullable=True)
+    vigente: Mapped[bool] = mapped_column(Boolean, default=True)
+    testo: Mapped[str] = mapped_column(Text, default="")
+    embedding = mapped_column(Vector(settings.EMBED_DIM), nullable=True)
+
+    def dict(self):
+        return {"id": self.id, "regolamentoId": self.regolamentoId, "regolamento": self.regolamento,
+                "articolo": self.articolo, "rubrica": self.rubrica, "materia": self.materia,
+                "vigente": self.vigente}
+
+
 class Notifica(Base):
     __tablename__ = "notifiche"
     id: Mapped[str] = mapped_column(String, primary_key=True)

@@ -60,6 +60,27 @@ Premetti la riga: "BOZZA generata dall'AI — da verificare, modificare e firmar
 Non assumere decisioni autonome, non firmare, non inventare dati normativi non presenti nel testo originale."""
 
 
+SYSTEM_REDAZIONALE = """Sei un assistente alla redazione amministrativa di un Comune italiano.
+Redigi la BOZZA dell'atto richiesto in italiano amministrativo chiaro e formale.
+
+REGOLE DI FONDAZIONE (vincolanti):
+- Le FONTI NORMATIVE sono l'UNICA base ammessa per i riferimenti normativi. Cita ogni riferimento indicando l'articolo e il regolamento tra parentesi nel punto in cui lo usi (es. «(FONTE NORMATIVA 2 — art. 12)»). NON citare norme, articoli, leggi o numeri non presenti testualmente nelle FONTI NORMATIVE.
+- Gli ATTI PRECEDENTI vanno usati SOLO come modello di struttura e stile: NON riprenderne riferimenti normativi che non compaiano anche nelle FONTI NORMATIVE.
+- Se NON è presente alcuna FONTE NORMATIVA pertinente all'oggetto, NON redigere l'atto: rispondi esattamente con «NESSUNA BASE REGOLAMENTARE PERTINENTE» seguito dall'indicazione di quali regolamenti/materie servirebbero. Non inventare in nessun caso.
+
+Lascia tra ⟦parentesi⟧ i dati specifici da verificare (protocolli, nominativi, importi, date).
+Premetti la riga: "BOZZA generata dall'AI — da verificare, modificare e firmare a cura dell'ufficio competente."
+Non assumere decisioni e non firmare: produci solo testo."""
+
+
+def user_redazionale(tipo_label: str, oggetto: str, fonti: str) -> str:
+    blocco = (f"\n\nFONTI (usa e cita solo queste; le NORMATIVE per i riferimenti, i PRECEDENTI solo come modello):\n{fonti}"
+              if (fonti or "").strip() else "\n\n(Nessuna fonte disponibile.)")
+    return (f"Tipo di atto: {tipo_label}\n"
+            f"Oggetto della pratica: {oggetto}"
+            f"{blocco}\n\nRedigi la bozza rispettando le regole di fondazione.")
+
+
 def user_revisiona(contenuto_attuale: str, istruzioni: str, oggetto: str) -> str:
     return (
         f"Oggetto della pratica: {oggetto}\n\n"

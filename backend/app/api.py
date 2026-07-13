@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .config import settings
-from . import models, storage, parsing, ingest, search, auth as auth_module
+from . import models, storage, parsing, ingest, search, auth as auth_module, normativa as normativa_module
 from . import diagnostica, backup as backup_module, mailer, configurazione_cfg, importazione as imp_module, integrazione as integ_module, utenti as utenti_module
 from . import reference as R
 from .reference import day_from
@@ -641,13 +641,15 @@ def aggiungi_bozza(pid: str, payload: dict = Body(...), me: str = Depends(auth_u
     # contenuto: AI reale se richiesto, altrimenti placeholder
     contenuto = payload.get("testo", "")
     if payload.get("usaAI") and not contenuto:
-        # RAG: recupera dall'indice i passaggi pertinenti (regolamenti, atti, precedenti)
-        # per fondare la bozza ed evitare riferimenti inventati. Esclude la pratica stessa.
+        # RAG redazionale: fonda la bozza sul corpus NORMATIVO vigente (base
+        # autorevole) + atti precedenti (solo come modello di stile). Se non c'è
+        # base normativa pertinente, l'assistente si rifiuta di inventare.
         query = " ".join(filter(None, [lbl, p.oggetto, p.tipoProcedimento]))
-        fonti = search.blocco_fonti(search.contesto_per(db, query, k=4, escludi={f"pratica:{pid}"}))
+        ctx = search.contesto_redazionale(db, query, tipo_atto=tipo, escludi={f"pratica:{pid}"})
+        fonti, _ = search.blocco_redazionale(ctx)
         ogg = f"{p.oggetto} (tipo procedimento: {p.tipoProcedimento})" if p.tipoProcedimento else p.oggetto
         try:
-            contenuto = ai.bozza(lbl, ogg, fonti)
+            contenuto = ai.redazionale(lbl, ogg, fonti)
         except ai.AIUnavailable:
             contenuto = f"BOZZA generata dall'AI — da verificare.\n\n⟦Testo da completare per: {lbl} — {p.oggetto}⟧"
 
@@ -801,9 +803,12 @@ def rigenera_contenuto(aid: str, payload: dict = Body(...), me: str = Depends(au
             nuovo = ai.revisiona(contenuto_base, istruzioni, a.oggetto)
         else:
             tipo_lbl = (payload.get("tipo_lbl") or a.tipo)
-            # RAG: fonda la prima stesura sui passaggi pertinenti dell'indice (esclude l'atto stesso)
-            fonti = search.blocco_fonti(search.contesto_per(db, f"{tipo_lbl} {a.oggetto}", k=4, escludi={f"atto:{a.id}"}))
-            nuovo = ai.bozza(tipo_lbl, a.oggetto, fonti)
+            # RAG redazionale: fonda la prima stesura sul corpus normativo vigente
+            # (+ atti precedenti come modello), escludendo l'atto stesso.
+            ctx = search.contesto_redazionale(db, f"{tipo_lbl} {a.oggetto}", tipo_atto=a.tipo,
+                                              escludi={f"atto:{a.id}"})
+            fonti, _ = search.blocco_redazionale(ctx)
+            nuovo = ai.redazionale(tipo_lbl, a.oggetto, fonti)
     except ai.AIUnavailable as e:
         raise HTTPException(503, f"Server AI non disponibile: {e}")
     return {"contenuto_nuovo": nuovo, "modello": settings.AI_MODEL_DRAFT or settings.AI_MODEL_GEN}
@@ -1009,6 +1014,115 @@ def cerca_reindex(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     n = search.reindex(db)
     _enqueue_embed()
     return {"indicizzati": n, "embedding_generati": "in_coda", **search.status(db)}
+
+
+# ---------- corpus normativo (base di conoscenza dell'assistente redazionale) ----------
+_DOCX_CT = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/normativa")
+def normativa_lista(me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    return {"regolamenti": normativa_module.lista(db), **normativa_module.status(db)}
+
+
+@router.post("/normativa/import")
+async def normativa_import(
+    file: UploadFile = File(...),
+    titolo: str = Form(""),
+    materia: str = Form(""),
+    me: str = Depends(auth_user),
+    db: Session = Depends(get_db),
+):
+    """Carica un regolamento (PDF/DOCX/TXT) → estrazione testo → chunking per
+    articolo → embedding. Alimenta il corpus normativo del RAG redazionale."""
+    require_perm(me, "supervisione")
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File '{file.filename}' supera il limite di 20 MB")
+    fname = file.filename or "regolamento"
+    ext = parsing.extract_text(fname, file.content_type or "", data)
+    testo = (ext.get("text") or "").strip()
+    if not testo:
+        raise HTTPException(422, f"Nessun testo estraibile da '{fname}'" +
+                            (f": {ext['error']}" if ext.get("error") else ""))
+    tit = titolo.strip() or fname.rsplit(".", 1)[0]
+    fonte = ("docx:" if fname.lower().endswith(".docx") or file.content_type == _DOCX_CT
+             else "pdf:" if fname.lower().endswith(".pdf") else "file:") + fname
+    try:
+        res = normativa_module.ingest(db, tit, testo, materia=materia.strip() or None, fonte=fonte)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True, "ocr": ext.get("ocr", False), **res}
+
+
+@router.post("/normativa/import-testo")
+def normativa_import_testo(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Import da testo incollato (inserimento manuale)."""
+    require_perm(me, "supervisione")
+    testo = (payload.get("testo") or "").strip()
+    titolo = (payload.get("titolo") or "").strip()
+    if not testo or not titolo:
+        raise HTTPException(400, "Titolo e testo sono obbligatori")
+    try:
+        res = normativa_module.ingest(db, titolo, testo, materia=(payload.get("materia") or "").strip() or None,
+                                      fonte="manuale")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True, **res}
+
+
+@router.post("/normativa/import-url")
+def normativa_import_url(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Import da URL pubblico (es. Albo pretorio, Normattiva). SOLO scaricamento
+    in ingresso di testi normativi pubblici: nessun dato dell'ente esce (vincolo on-prem).
+    In LAN chiusa può richiedere un proxy/allowlist verso la fonte."""
+    require_perm(me, "supervisione")
+    url = (payload.get("url") or "").strip()
+    titolo = (payload.get("titolo") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "URL non valido")
+    import httpx as _httpx
+    try:
+        r = _httpx.get(url, timeout=30, follow_redirects=True)
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(502, f"Download fallito: {e}")
+    fname = url.rsplit("/", 1)[-1] or "documento"
+    ext = parsing.extract_text(fname, r.headers.get("content-type", ""), r.content)
+    testo = (ext.get("text") or "").strip()
+    if not testo:
+        raise HTTPException(422, "Nessun testo estraibile dall'URL")
+    try:
+        res = normativa_module.ingest(db, titolo or fname, testo,
+                                      materia=(payload.get("materia") or "").strip() or None,
+                                      fonte=f"url:{url}")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True, **res}
+
+
+@router.post("/normativa/{reg_id}/vigenza")
+def normativa_vigenza(reg_id: str, payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    if not normativa_module.set_vigente(db, reg_id, bool(payload.get("vigente", True))):
+        raise HTTPException(404, "Regolamento non trovato")
+    return {"ok": True}
+
+
+@router.delete("/normativa/{reg_id}")
+def normativa_elimina(reg_id: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    if not normativa_module.elimina(db, reg_id):
+        raise HTTPException(404, "Regolamento non trovato")
+    return {"ok": True}
+
+
+@router.post("/normativa/embed-pending")
+def normativa_embed_pending(me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Rigenera gli embedding mancanti (es. dopo che il server AI torna online)."""
+    require_perm(me, "supervisione")
+    n = normativa_module.embed_pending(db)
+    return {"embeddati": n, **normativa_module.status(db)}
 
 
 # ---------- cruscotto ----------

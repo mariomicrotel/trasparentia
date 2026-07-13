@@ -163,6 +163,106 @@ def blocco_fonti(passaggi: list[dict]) -> str:
     )
 
 
+# ---------- RAG normativo: fondazione sui regolamenti dell'ente ----------
+
+# Gate di pertinenza (cosine_distance ∈ [0,2], 0 = identico). I modelli di
+# embedding comprimono i testi amministrativi italiani in una regione ristretta,
+# quindi una soglia assoluta unica è fragile. Usiamo un gate relativo:
+#  - il MIGLIORE match deve stare sotto `best_floor` (altrimenti nulla è davvero
+#    pertinente → rifiuto);
+#  - si tengono poi solo gli articoli entro `spread` dal migliore.
+# Valori di default tarati su nomic-embed-text; la calibrazione fine va fatta con
+# il golden set (modulo Calibrazione). Sovrascrivibili per adattarsi a bge-m3 ecc.
+NORMA_BEST_FLOOR = 0.33
+NORMA_SPREAD = 0.14
+
+
+def contesto_normativo(db, query: str, k: int = 5, materia: str | None = None,
+                       max_char: int = 1400, budget_char: int = 5000,
+                       best_floor: float = NORMA_BEST_FLOOR, spread: float = NORMA_SPREAD) -> list[dict]:
+    """Recupera fino a k articoli PERTINENTI dal corpus normativo VIGENTE
+    (tabella NormaChunk) con gate di pertinenza relativo (vedi costanti sopra).
+    È la base autorevole per i riferimenti normativi dell'assistente redazionale.
+    Ritorna [] se l'AI/embedding non è disponibile o se nulla è pertinente
+    (→ il chiamante deve rifiutarsi di inventare)."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    try:
+        qv = ai.embed(query)
+    except ai.AIUnavailable:
+        return []
+    if not qv or len(qv) != settings.EMBED_DIM:
+        return []
+    dist = models.NormaChunk.embedding.cosine_distance(qv)
+    q = (db.query(models.NormaChunk, dist.label("dist"))
+           .filter(models.NormaChunk.vigente == True,          # noqa: E712
+                   models.NormaChunk.embedding.is_not(None)))
+    if materia:
+        q = q.filter(models.NormaChunk.materia == materia)
+    rows = q.order_by(dist).limit(k * 4).all()
+    if not rows:
+        return []
+    best = rows[0][1]
+    if best is None or best > best_floor:
+        return []  # nemmeno il migliore è pertinente → nessuna base normativa
+    cutoff = best + spread
+    passaggi, visti, tot = [], set(), 0
+    for r, d in rows:
+        if d is not None and d > cutoff:
+            break  # ordinati per distanza: oltre il margine dal migliore
+        # Dedup per articolo (i sotto-chunk della stessa norma non si ripetono).
+        key = (r.regolamentoId, r.articolo)
+        if key in visti:
+            continue
+        testo = (r.testo or "").strip()[:max_char]
+        if not testo:
+            continue
+        if passaggi and tot + len(testo) > budget_char:
+            break
+        visti.add(key)
+        rif = f"art. {r.articolo}" if r.articolo else "testo"
+        titolo = f"{r.regolamento} — {rif}" + (f" ({r.rubrica})" if r.rubrica else "")
+        passaggi.append({"rif": f"{r.regolamentoId}:{r.articolo or 'na'}",
+                         "titolo": titolo, "testo": testo, "tipo": "normativa",
+                         "dist": round(float(d), 3) if d is not None else None})
+        tot += len(testo)
+        if len(passaggi) >= k:
+            break
+    return passaggi
+
+
+def contesto_redazionale(db, query: str, tipo_atto: str | None = None,
+                         k_norme: int = 5, k_atti: int = 2,
+                         materia: str | None = None,
+                         escludi: set[str] | None = None) -> dict:
+    """Contesto ibrido per la redazione di un atto:
+    - `normativa`: articoli dei regolamenti vigenti (base autorevole);
+    - `precedenti`: atti già redatti dall'ente (solo modello di struttura/stile).
+    Ritorna {"normativa": [...], "precedenti": [...]}."""
+    norme = contesto_normativo(db, query, k=k_norme, materia=materia)
+    # Precedenti: riusa l'indice generale, ma tiene solo gli atti.
+    escl = set(escludi or set())
+    grezzi = contesto_per(db, query, k=k_atti * 4, escludi=escl)
+    precedenti = [p for p in grezzi if p["rif"].startswith("atto:")][:k_atti]
+    for p in precedenti:
+        p["tipo"] = "precedente"
+    return {"normativa": norme, "precedenti": precedenti}
+
+
+def blocco_redazionale(ctx: dict) -> tuple[str, bool]:
+    """Costruisce il blocco FONTI per la redazione, con NORMATIVA e ATTI PRECEDENTI
+    etichettati distintamente. Ritorna (blocco, ha_base_normativa)."""
+    norme = ctx.get("normativa") or []
+    prec = ctx.get("precedenti") or []
+    parti = []
+    for i, p in enumerate(norme):
+        parti.append(f"[FONTE NORMATIVA {i + 1} — {p['titolo']} ({p['rif']})]\n{p['testo']}")
+    for i, p in enumerate(prec):
+        parti.append(f"[ATTO PRECEDENTE {i + 1} — {p['titolo']} ({p['rif']})]\n{p['testo']}")
+    return ("\n\n".join(parti), bool(norme))
+
+
 def status(db) -> dict:
     tot = db.query(models.Indice).count()
     emb = db.query(models.Indice).filter(models.Indice.embedding.is_not(None)).count()

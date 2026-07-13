@@ -25,6 +25,18 @@ def _ocr_image(data: bytes) -> str:
     return pytesseract.image_to_string(Image.open(io.BytesIO(data)), lang="ita")
 
 
+def _docx_text(data: bytes) -> str:
+    """Testo da .docx preservando i ritorni a capo tra paragrafi: fondamentale
+    per il parser normativo, che riconosce gli articoli su righe separate."""
+    from docx import Document
+    doc = Document(io.BytesIO(data))
+    parti = [p.text for p in doc.paragraphs]
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            parti.append(" \t ".join(c.text for c in row.cells))
+    return "\n".join(parti)
+
+
 def extract_text(filename: str, content_type: str, data: bytes) -> dict:
     name = (filename or "").lower()
     ct = (content_type or "").lower()
@@ -40,6 +52,8 @@ def extract_text(filename: str, content_type: str, data: bytes) -> dict:
                 except Exception:
                     pass
             return {"text": text.strip(), "ocr": ocr}
+        if name.endswith(".docx") or ct == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return {"text": _docx_text(data).strip(), "ocr": False}
         if name.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")) or ct.startswith("image/"):
             if settings.OCR_ENABLED:
                 return {"text": _ocr_image(data).strip(), "ocr": True}

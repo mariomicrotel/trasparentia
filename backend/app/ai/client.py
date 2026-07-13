@@ -220,6 +220,14 @@ def bozza(tipo_label: str, oggetto: str, contesto: str = "") -> str:
                  fmt_json=False, model=_draft_model(), num_predict=1500, repeat_penalty=1.3)
 
 
+def redazionale(tipo_label: str, oggetto: str, fonti: str) -> str:
+    """Redazione atto fondata sul corpus normativo (+ atti precedenti come modello).
+    Il prompt impone la fondazione esclusiva sulle FONTI NORMATIVE e il rifiuto se
+    non pertinenti (cfr. SYSTEM_REDAZIONALE)."""
+    return _chat(prompts.SYSTEM_REDAZIONALE, prompts.user_redazionale(tipo_label, oggetto, fonti),
+                 fmt_json=False, model=_draft_model(), num_predict=1500, repeat_penalty=1.3)
+
+
 def revisiona(contenuto_attuale: str, istruzioni: str, oggetto: str) -> str:
     """Revisione assistita del testo di un atto. Usa AI_MODEL_DRAFT per qualità superiore."""
     return _chat(prompts.SYSTEM_REVISIONA,
