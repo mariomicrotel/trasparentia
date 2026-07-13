@@ -183,6 +183,17 @@ def _termini(query: str) -> list[str]:
     return [t for t in toks if t not in _STOP]
 
 
+def _norma_rif_titolo(r) -> tuple[str, str]:
+    """Riferimento univoco + titolo leggibile di un NormaChunk. Per i documenti
+    con articoli usa l'articolo; per quelli senza (es. PIAO) usa l'id del chunk
+    e un numero di estratto, così le citazioni restano distinte e precise."""
+    if r.articolo:
+        titolo = f"{r.regolamento} — art. {r.articolo}" + (f" ({r.rubrica})" if r.rubrica else "")
+        return f"{r.regolamentoId}:{r.articolo}", titolo
+    seg = r.id.rsplit("#", 1)[-1] if "#" in (r.id or "") else ""
+    return r.id, f"{r.regolamento} — estratto {seg}".strip()
+
+
 def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[dict]:
     """Ricerca lessicale nel corpus normativo vigente: match dei termini della
     domanda su testo/rubrica/titolo, ordinati per numero di termini presenti.
@@ -195,7 +206,7 @@ def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[di
                  models.NormaChunk.regolamento.ilike(f"%{t}%")) for t in termini]
     rows = (db.query(models.NormaChunk)
               .filter(models.NormaChunk.vigente == True, or_(*conds))  # noqa: E712
-              .limit(80).all())
+              .limit(400).all())  # ampio: un solo documento può avere >150 chunk
 
     # Scoring per CONFINE DI PAROLA: l'ILIKE è solo un prefiltro grezzo (a
     # sottostringa: «funziona» aggancerebbe «funzionario»). Qui contiamo solo i
@@ -209,13 +220,15 @@ def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[di
     rows.sort(key=score, reverse=True)
     out, visti = [], set()
     for r in rows:
-        key = (r.regolamentoId, r.articolo)
+        # Dedup per articolo, MA per i documenti senza articoli (articolo=None,
+        # es. PIAO) ogni chunk è distinto: dedup per id, altrimenti collasserebbero
+        # tutti in uno solo e i passaggi con il dato cercato andrebbero persi.
+        key = (r.regolamentoId, r.articolo) if r.articolo else r.id
         if key in visti or score(r) == 0:
             continue
         visti.add(key)
-        rif = f"art. {r.articolo}" if r.articolo else "testo"
-        titolo = f"{r.regolamento} — {rif}" + (f" ({r.rubrica})" if r.rubrica else "")
-        out.append({"rif": f"{r.regolamentoId}:{r.articolo or 'na'}", "titolo": titolo,
+        rif, titolo = _norma_rif_titolo(r)
+        out.append({"rif": rif, "titolo": titolo,
                     "testo": (r.testo or "").strip()[:max_char], "tipo": "normativa"})
         if len(out) >= k:
             break
@@ -283,8 +296,10 @@ def contesto_normativo(db, query: str, k: int = 5, materia: str | None = None,
     for r, d in rows:
         if d is not None and d > cutoff:
             break  # ordinati per distanza: oltre il margine dal migliore
-        # Dedup per articolo (i sotto-chunk della stessa norma non si ripetono).
-        key = (r.regolamentoId, r.articolo)
+        # Dedup per articolo; per i documenti senza articoli (articolo=None,
+        # es. PIAO) ogni chunk è distinto (dedup per id), altrimenti collasserebbero
+        # tutti in uno solo perdendo i passaggi col dato cercato.
+        key = (r.regolamentoId, r.articolo) if r.articolo else r.id
         if key in visti:
             continue
         testo = (r.testo or "").strip()[:max_char]
@@ -293,10 +308,8 @@ def contesto_normativo(db, query: str, k: int = 5, materia: str | None = None,
         if passaggi and tot + len(testo) > budget_char:
             break
         visti.add(key)
-        rif = f"art. {r.articolo}" if r.articolo else "testo"
-        titolo = f"{r.regolamento} — {rif}" + (f" ({r.rubrica})" if r.rubrica else "")
-        passaggi.append({"rif": f"{r.regolamentoId}:{r.articolo or 'na'}",
-                         "titolo": titolo, "testo": testo, "tipo": "normativa",
+        rif, titolo = _norma_rif_titolo(r)
+        passaggi.append({"rif": rif, "titolo": titolo, "testo": testo, "tipo": "normativa",
                          "dist": round(float(d), 3) if d is not None else None})
         tot += len(testo)
         if len(passaggi) >= k:
