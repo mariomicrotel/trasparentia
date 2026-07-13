@@ -54,6 +54,8 @@ services:
       AI_MODEL_GEN: ${AI_MODEL_GEN:-qwen2.5:7b-instruct}
       AI_MODEL_DRAFT: ${AI_MODEL_DRAFT:-}
       AI_MODEL_EMBED: ${AI_MODEL_EMBED:-nomic-embed-text}
+      AI_VRAM_GB: ${AI_VRAM_GB:-8}
+      AI_GPU_STATS_URL: ${AI_GPU_STATS_URL:-}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-trasparentia}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-trasparentia}
@@ -96,12 +98,26 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - backupdata:/data/backup
     ports:
       - "8008:8000"   # debug diretto; in produzione rimuovere, usare solo Caddy
+
+  # Step one-shot: applica lo schema via Alembic (unica fonte) ed esce.
+  # backend/worker/beat attendono il suo completamento, così le migrazioni
+  # girano UNA sola volta e prima di qualsiasi accesso al DB.
+  migrate:
+    build: ./backend
+    command: python -m app.migrate
+    environment: *backend_env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   worker:
     build: ./backend
@@ -114,6 +130,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -129,6 +147,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

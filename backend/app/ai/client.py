@@ -207,17 +207,34 @@ def _aggrega(campioni: list[dict]) -> dict:
     }
 
 
+def _gpu_stats() -> list[dict] | None:
+    """Telemetria GPU dall'exporter nvidia-smi (se configurato). Best-effort:
+    None se non configurato o non raggiungibile → il monitor mostra la nota."""
+    url = (settings.AI_GPU_STATS_URL or "").strip()
+    if not url:
+        return None
+    try:
+        r = _get_http().get(url, headers=_headers(), timeout=3)
+        r.raise_for_status()
+        data = r.json()
+        gpus = data.get("gpus") if isinstance(data, dict) else data
+        return gpus if isinstance(gpus, list) and gpus else None
+    except Exception:
+        return None
+
+
 def metriche() -> dict:
     """Snapshot per il monitor di sforzo inferenziale: stato VRAM/modelli caricati
-    (live da /api/ps) + serie temporale e KPI aggregati delle inferenze."""
+    (live da /api/ps) + serie temporale e KPI aggregati delle inferenze + (se
+    l'exporter è configurato) telemetria GPU reale."""
     campioni = list(_METRICHE)
     gen_base = settings.AI_MODEL_GEN.split(":")[0]
+    gpu = _gpu_stats()
     out = {"online": False, "base_url": settings.OLLAMA_BASE_URL,
            "vram_totale_gb": settings.AI_VRAM_GB, "campioni": campioni,
-           "kpi": _aggrega(campioni),
-           # Telemetria GPU (utilizzo %, temperatura, consumo) NON disponibile via
-           # API Ollama: richiede un exporter (nvidia-smi) sul server AI.
-           "gpu_note": "Utilizzo GPU, temperatura e consumo non sono esposti dall'API Ollama: richiedono un exporter (nvidia-smi) sul server AI."}
+           "kpi": _aggrega(campioni), "gpu": gpu,
+           # Nota mostrata solo se l'exporter GPU non è configurato/raggiungibile.
+           "gpu_note": None if gpu else "Utilizzo GPU, temperatura e consumo non sono esposti dall'API Ollama: attiva l'exporter nvidia-smi sul server AI (vedi platform/scripts/gpu-exporter.py) e imposta AI_GPU_STATS_URL."}
     try:
         r = _get_http().get(f"{settings.OLLAMA_BASE_URL}/api/ps", headers=_headers(), timeout=5)
         r.raise_for_status()

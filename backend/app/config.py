@@ -25,6 +25,9 @@ class Settings:
     AI_TLS_VERIFY: bool = os.getenv("AI_TLS_VERIFY", "true").lower() == "true"
     # VRAM della GPU del server AI (GB), riferimento per il monitor (RTX 2080 = 8).
     AI_VRAM_GB: float = float(os.getenv("AI_VRAM_GB", "8"))
+    # URL dell'exporter nvidia-smi sul server AI (via reverse proxy, es.
+    # https://192.168.14.221/gpu). Se vuoto, il monitor mostra solo i dati Ollama.
+    AI_GPU_STATS_URL: str = os.getenv("AI_GPU_STATS_URL", "")
 
     # Storage documenti (MinIO, S3-compatibile)
     MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")

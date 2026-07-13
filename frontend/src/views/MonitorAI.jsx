@@ -71,6 +71,7 @@ export default function MonitorAI({ M, me }) {
   const [d, setD] = useState(null);
   const [errore, setErrore] = useState("");
   const vramSerie = useRef([]);       // % VRAM per ogni poll
+  const gpuUtilSerie = useRef([]);    // % utilizzo GPU per ogni poll (se exporter attivo)
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -81,6 +82,8 @@ export default function MonitorAI({ M, me }) {
         if (!vivo) return;
         const pct = r.vram_totale_gb ? Math.round((r.vram_gb / r.vram_totale_gb) * 100) : 0;
         vramSerie.current = [...vramSerie.current, pct].slice(-MAX_PUNTI);
+        const gutil = r.gpu?.[0]?.util_pct;
+        if (typeof gutil === "number") gpuUtilSerie.current = [...gpuUtilSerie.current, gutil].slice(-MAX_PUNTI);
         setD(r); setErrore("");
       } catch (e) {
         if (vivo) setErrore(e.message || "Errore");
@@ -98,6 +101,7 @@ export default function MonitorAI({ M, me }) {
   const ultimoMinuto = campioni.filter((c) => oraS - c.ts < 60).length;
   const online = d?.online;
   const kpi = d?.kpi || {};
+  const gpu0 = d?.gpu?.[0];
   const genModel = (d?.modelli || []).find((m) => m.is_gen);
   const fmtKeep = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
 
@@ -122,6 +126,34 @@ export default function MonitorAI({ M, me }) {
       {errore && !d && (
         <div className="banner banner--ambra" style={{ marginBottom: 16, fontSize: 13 }}>
           <Icon name="alertCircle" size={16} stroke={2} /><span>{errore}</span>
+        </div>
+      )}
+
+      {/* ── Telemetria GPU (solo se l'exporter nvidia-smi è attivo) ──────── */}
+      {gpu0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card__head">
+            <Icon name="activity" size={18} stroke={2} style={{ color: "var(--blu)" }} />
+            <h3 style={{ flex: 1 }}>GPU · {gpu0.name || "scheda video"}</h3>
+            <span className="sub">nvidia-smi</span>
+          </div>
+          <div className="card__body">
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              <Stat label="Utilizzo GPU" value={gpu0.util_pct ?? "—"} unit="%"
+                    tone={gpu0.util_pct > 85 ? "var(--rosso)" : gpu0.util_pct > 0 ? "var(--verde)" : "var(--text)"} />
+              <Stat label="Temperatura" value={gpu0.temp_c ?? "—"} unit="°C"
+                    tone={gpu0.temp_c > 83 ? "var(--rosso)" : gpu0.temp_c > 70 ? "var(--arancio, #c2610c)" : "var(--text)"} />
+              <Stat label="Consumo" value={gpu0.power_w != null ? Math.round(gpu0.power_w) : "—"}
+                    unit={gpu0.power_limit_w ? `/ ${Math.round(gpu0.power_limit_w)} W` : "W"} />
+              <Stat label="Memoria GPU" value={gpu0.mem_used_mb != null ? (gpu0.mem_used_mb / 1024).toFixed(1) : "—"}
+                    unit={gpu0.mem_total_mb ? `/ ${(gpu0.mem_total_mb / 1024).toFixed(0)} GB` : "GB"} />
+              <Stat label="Uso memoria" value={gpu0.mem_util_pct ?? "—"} unit="%" />
+            </div>
+            <AreaChart punti={gpuUtilSerie.current} max={100} unit="%" color="var(--verde, #1a7a45)" />
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+              Utilizzo del core GPU nel tempo (100% = calcolo a pieno carico durante l'inferenza).
+            </div>
+          </div>
         </div>
       )}
 

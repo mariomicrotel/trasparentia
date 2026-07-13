@@ -1,0 +1,17 @@
+[Unit]
+Description=TrasParentIA GPU exporter (nvidia-smi -> JSON su 127.0.0.1:9110)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 /usr/local/bin/gpu-exporter.py
+Restart=on-failure
+RestartSec=3
+# Servizio minimale: nessun privilegio speciale, ascolta solo su localhost.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
