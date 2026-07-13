@@ -18,6 +18,7 @@ import Configurazione from "./views/Configurazione.jsx";
 import Import from "./views/Import.jsx";
 import Aiuto from "./views/Aiuto.jsx";
 import Utenti from "./views/Utenti.jsx";
+import Regolamenti from "./views/Regolamenti.jsx";
 import Calibrazione from "./views/Calibrazione.jsx";
 import Uffici from "./views/Uffici.jsx";
 
@@ -195,6 +196,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     if (view === "import") return <Import {...viewProps} />;
     if (view === "aiuto") return <Aiuto {...viewProps} />;
     if (view === "utenti") return <Utenti {...viewProps} />;
+    if (view === "regolamenti") return <Regolamenti {...viewProps} />;
     if (view === "calibrazione") return <Calibrazione {...viewProps} />;
     if (view === "uffici") return <Uffici {...viewProps} />;
     return <Stub title="Modulo" icon="grid" nav={nav} />;
@@ -211,6 +213,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     { k: "inventario",   lbl: "Inventario beni",       ico: "box" },
     { g: "Sistema" },
     { k: "uffici",       lbl: "Uffici e flussi",       ico: "building" },
+    { k: "regolamenti",  lbl: "Corpus normativo",      ico: "gavel" },
     { k: "import",       lbl: "Importazione massiva",  ico: "upload" },
     { k: "calibrazione", lbl: "Calibrazione AI",       ico: "sliders" },
     { k: "utenti",       lbl: "Gestione utenti",       ico: "users" },

@@ -1022,7 +1022,7 @@ _DOCX_CT = "application/vnd.openxmlformats-officedocument.wordprocessingml.docum
 
 @router.get("/normativa")
 def normativa_lista(me: str = Depends(auth_user), db: Session = Depends(get_db)):
-    return {"regolamenti": normativa_module.lista(db), **normativa_module.status(db)}
+    return {"regolamenti": normativa_module.lista(db), "stato": normativa_module.status(db)}
 
 
 @router.post("/normativa/import")

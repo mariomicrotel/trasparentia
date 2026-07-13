@@ -181,6 +181,21 @@ export const api = {
     return upload("/api/beni/import-csv", fd, me);
   },
 
+  // corpus normativo (assistente redazionale RAG)
+  normativaLista: (me) => req("GET", "/api/normativa", null, me),
+  normativaImportFile: (file, titolo, materia, me) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("titolo", titolo || "");
+    fd.append("materia", materia || "");
+    return upload("/api/normativa/import", fd, me);
+  },
+  normativaImportTesto: (payload, me) => req("POST", "/api/normativa/import-testo", payload, me),
+  normativaImportUrl: (payload, me) => req("POST", "/api/normativa/import-url", payload, me),
+  normativaVigenza: (regId, vigente, me) => req("POST", `/api/normativa/${encodeURIComponent(regId)}/vigenza`, { vigente }, me),
+  normativaElimina: (regId, me) => req("DELETE", `/api/normativa/${encodeURIComponent(regId)}`, null, me),
+  normativaEmbedPending: (me) => req("POST", "/api/normativa/embed-pending", null, me),
+
   // utenti & auth
   getMe: () => req("GET", "/api/me"),
   getUtenti: (me) => req("GET", "/api/utenti", null, me),
