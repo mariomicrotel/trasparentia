@@ -26,7 +26,7 @@ function Istanze({ me, nav, tick }) {
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i.procedimento}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 CUI <span className="mono">{i.cui}</span> · {i.regime} · {i.subContext} · presentata {fmtDate(i.creato)}
-                {i.presentatoreNome ? ` · ${i.presentatoreNome}` : ""}
+                {i.presentatoreNome || i.presentatoreCognome ? ` · ${[i.presentatoreNome, i.presentatoreCognome].filter(Boolean).join(" ")}` : ""}
               </div>
             </div>
             {i.praticaId && (

@@ -1187,6 +1187,7 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     presentatore = payload.get("presentatore") or {}
     dati = payload.get("dati") or {}
     allegati = payload.get("allegati") or []
+    nome_completo = " ".join(filter(None, [presentatore.get("nome", ""), presentatore.get("cognome", "")])).strip()
 
     # Controllo formale automatico (precondizione all'invio).
     mancanti = sue_module.valida_modulo(procId, dati)
@@ -1199,7 +1200,7 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
 
     # Protocollo (interno o sistema esterno) + numero pratica.
     prot_est = integ_module.registra_protocollo(
-        oggetto=oggetto, mittente=presentatore.get("nome", ""), ufficio=ufficio,
+        oggetto=oggetto, mittente=nome_completo, ufficio=ufficio,
         categoria="Pratica ufficio tecnico")
     protocollo = prot_est["numero"] if prot_est.get("ok") and prot_est.get("numero") else next_prot(db)
     prefix = R.UFF_PREFIX.get(ufficio, "UT") + "/2026/"
@@ -1214,7 +1215,7 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     ]
     prat = models.Pratica(
         id=pid, fascicolo=pid, protocollo=protocollo, oggetto=oggetto, categoria="pratica_tecnica",
-        tipoProcedimento=proc["nome"], richiedente=presentatore.get("nome", ""),
+        tipoProcedimento=proc["nome"], richiedente=nome_completo,
         ufficio=ufficio, responsabile=None, stato="assegnata", priorita="media",
         apertura=_now_iso(), scadenza=scadenza, comId=None, cronologia=cron, bozze=[],
     )

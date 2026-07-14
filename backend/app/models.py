@@ -122,6 +122,7 @@ class IstanzaSUE(Base):
     procedimento: Mapped[str] = mapped_column(Text)
     regime: Mapped[str] = mapped_column(String, default="")
     presentatoreNome: Mapped[str] = mapped_column(String, default="")
+    presentatoreCognome: Mapped[str] = mapped_column(String, default="")
     presentatoreCF: Mapped[str] = mapped_column(String, default="")
     presentatoreEmail: Mapped[str] = mapped_column(String, default="")
     datiModulo: Mapped[dict] = mapped_column(JSON, default=dict)

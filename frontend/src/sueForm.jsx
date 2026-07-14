@@ -27,10 +27,10 @@ export function CampoModulo({ campo, valore, onChange }) {
   );
 }
 
-export function Presenta({ toast, onFatto }) {
+export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
   const [cat, setCat] = useState(null);
   const [procId, setProcId] = useState("");
-  const [pres, setPres] = useState({ nome: "", cf: "", email: "" });
+  const [email, setEmail] = useState(identita?.email || "");
   const [dati, setDati] = useState({});
   const [busy, setBusy] = useState(false);
   const [esito, setEsito] = useState(null);
@@ -42,9 +42,10 @@ export function Presenta({ toast, onFatto }) {
   function scegli(id) { setProcId(id); setDati({}); setEsito(null); }
 
   async function invia() {
+    const presentatore = { nome: identita.nome, cognome: identita.cognome, cf: identita.cf, email };
     setBusy(true);
     try {
-      const r = await api.sueCreaIstanza({ procedimento: procId, presentatore: pres, dati });
+      const r = await api.sueCreaIstanza({ procedimento: procId, presentatore, dati });
       setEsito(r);
       toast(`Istanza presentata — CUI ${r.cui}`, "success");
       onFatto && onFatto();
@@ -64,7 +65,7 @@ export function Presenta({ toast, onFatto }) {
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", maxWidth: 460, margin: "10px auto 0" }}>
           L'istanza è stata protocollata e assegnata all'Ufficio Tecnico per l'istruttoria di back-office.
         </p>
-        <button className="btn btn--subtle" style={{ marginTop: 16 }} onClick={() => { setEsito(null); setProcId(""); setPres({ nome: "", cf: "", email: "" }); setDati({}); }}>
+        <button className="btn btn--subtle" style={{ marginTop: 16 }} onClick={() => { setEsito(null); setProcId(""); setDati({}); }}>
           <Icon name="plus" size={15} stroke={2} />Presenta un'altra istanza
         </button>
       </div></div>
@@ -74,6 +75,20 @@ export function Presenta({ toast, onFatto }) {
   return (
     <div className="card">
       <div className="card__body">
+        {identita && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 18,
+                       borderRadius: 8, background: "var(--verde-bg, #f0faf4)", border: "1px solid var(--verde, #1a7a45)" }}>
+            <Icon name="checkCircle" size={16} stroke={2} style={{ color: "var(--verde)", flexShrink: 0 }} />
+            <div style={{ fontSize: 13, flex: 1 }}>
+              Identità verificata: <b>{identita.nome} {identita.cognome}</b>
+              <span style={{ color: "var(--text-muted)" }}> · CF {identita.cf}</span>
+            </div>
+            {onCambiaIdentita && (
+              <button className="btn btn--subtle btn--sm" onClick={onCambiaIdentita}>Esci</button>
+            )}
+          </div>
+        )}
+
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Procedimento edilizio</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
@@ -95,11 +110,9 @@ export function Presenta({ toast, onFatto }) {
 
         {proc && (
           <>
-            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "6px 0 8px" }}>Presentatore</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-              <CampoModulo campo={{ label: "Nome e cognome", tipo: "text", required: true }} valore={pres.nome} onChange={v => setPres(s => ({ ...s, nome: v }))} />
-              <CampoModulo campo={{ label: "Codice fiscale", tipo: "text" }} valore={pres.cf} onChange={v => setPres(s => ({ ...s, cf: v }))} />
-              <CampoModulo campo={{ label: "Email", tipo: "text" }} valore={pres.email} onChange={v => setPres(s => ({ ...s, email: v }))} />
+            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "6px 0 8px" }}>Contatto</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16, maxWidth: 320 }}>
+              <CampoModulo campo={{ label: "Email per le comunicazioni", tipo: "text" }} valore={email} onChange={setEmail} />
             </div>
 
             <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "6px 0 8px" }}>Modulo digitale</div>
@@ -112,12 +125,12 @@ export function Presenta({ toast, onFatto }) {
             </div>
 
             <div style={{ marginTop: 18, display: "flex", gap: 8, alignItems: "center" }}>
-              <button className="btn btn--primary" disabled={busy || !pres.nome.trim()} onClick={invia}>
+              <button className="btn btn--primary" disabled={busy || !identita} onClick={invia}>
                 <Icon name="send" size={15} stroke={2} />{busy ? "Invio…" : "Invia istanza"}
               </button>
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 <Icon name="info" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                Prototipo: identità SPID/CIE, firma e Catalogo SSU nazionale sono simulati.
+                Prototipo: firma e Catalogo SSU nazionale sono simulati.
               </span>
             </div>
           </>
