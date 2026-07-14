@@ -65,6 +65,14 @@ class Settings:
     LINK_SITO_ISTITUZIONALE: str = os.getenv("LINK_SITO_ISTITUZIONALE", "")
     LINK_URP: str = os.getenv("LINK_URP", "")
 
+    # Scraping automatico delle pubblicazioni (Albo Pretorio / sezione novità del
+    # sito istituzionale) per tenere aggiornato l'indice di ricerca. Disabilitato
+    # di default: richiede una URL di elenco esplicita e un opt-in dell'ente.
+    ALBO_SCRAPE_URL: str = os.getenv("ALBO_SCRAPE_URL", "")
+    ALBO_SCRAPE_ENABLED: bool = os.getenv("ALBO_SCRAPE_ENABLED", "false").lower() == "true"
+    ALBO_SCRAPE_INTERVAL_MINUTES: int = int(os.getenv("ALBO_SCRAPE_INTERVAL_MINUTES", "1440"))
+    ALBO_SCRAPE_MAX_ITEMS: int = int(os.getenv("ALBO_SCRAPE_MAX_ITEMS", "40"))
+
     # Autenticazione Keycloak (Fase 7). Default: disabilitata (usa native auth o X-Role per demo).
     KC_AUTH_ENABLED: bool = os.getenv("KC_AUTH_ENABLED", "false").lower() == "true"
     KC_INTERNAL_URL: str = os.getenv("KC_INTERNAL_URL", "http://keycloak:8080")

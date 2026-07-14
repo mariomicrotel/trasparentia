@@ -2,8 +2,9 @@
 import logging
 
 from .celery_app import celery
+from .config import settings
 from .db import SessionLocal
-from . import ingest, search
+from . import ingest, search, albo_scraper
 
 log = logging.getLogger("trasparentia.tasks")
 
@@ -27,6 +28,24 @@ def poll_pec(self):
         return res
     except Exception as exc:
         log.error("Errore poll PEC: %s", exc)
+        raise self.retry(exc=exc)
+    finally:
+        db.close()
+
+
+@celery.task(name="app.tasks.sync_albo_pretorio", bind=True, max_retries=2, default_retry_delay=120)
+def sync_albo_pretorio(self):
+    """Sincronizzazione periodica delle pubblicazioni (Albo Pretorio / novità del
+    sito istituzionale). Opt-in: gira solo se ALBO_SCRAPE_ENABLED e URL impostati."""
+    if not settings.ALBO_SCRAPE_ENABLED or not settings.ALBO_SCRAPE_URL:
+        return {"skipped": True, "reason": "Scraping Albo Pretorio non abilitato/configurato"}
+    db = SessionLocal()
+    try:
+        res = albo_scraper.sync(db)
+        log.info("Sincronizzazione Albo Pretorio completata: %s", res)
+        return res
+    except Exception as exc:
+        log.error("Errore sincronizzazione Albo Pretorio: %s", exc)
         raise self.retry(exc=exc)
     finally:
         db.close()

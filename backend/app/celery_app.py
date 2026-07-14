@@ -32,5 +32,10 @@ celery.conf.update(
             "schedule": 300,
             "options": {"expires": 295},
         },
+        "sync-albo-pretorio": {
+            "task": "app.tasks.sync_albo_pretorio",
+            "schedule": settings.ALBO_SCRAPE_INTERVAL_MINUTES * 60,
+            "options": {"expires": settings.ALBO_SCRAPE_INTERVAL_MINUTES * 60 - 30},
+        },
     },
 )

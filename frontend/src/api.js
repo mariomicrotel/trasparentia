@@ -182,6 +182,10 @@ export const api = {
     return upload("/api/beni/import-csv", fd, me);
   },
 
+  // Albo Pretorio: sincronizzazione automatica (scraping)
+  alboStato: (me) => req("GET", "/api/albo", null, me),
+  alboSync: (me) => req("POST", "/api/albo/sync", null, me),
+
   // assistente chat globale (RAG)
   assistente: (domanda, storia, me) => req("POST", "/api/assistente", { domanda, storia }, me),
 

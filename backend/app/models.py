@@ -108,6 +108,27 @@ class Indice(Base):
         return {"id": self.id, "refTipo": self.refTipo, "refId": self.refId, "titolo": self.titolo}
 
 
+class AttoAlbo(Base):
+    """Pubblicazione recuperata via scraping dall'Albo Pretorio / sezione
+    pubblicazioni del sito istituzionale. NON è una fonte normativa (non entra
+    in NormaChunk): è un atto puntuale (avviso, delibera, determina...) indicizzato
+    nell'Indice generale come riferimento/precedente per ricerca e assistente."""
+    __tablename__ = "atti_albo"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # slug stabile derivato dall'URL pagina
+    titolo: Mapped[str] = mapped_column(Text)
+    urlPagina: Mapped[str] = mapped_column(Text)
+    categoria: Mapped[str | None] = mapped_column(String, nullable=True)
+    dataPubblicazione: Mapped[str | None] = mapped_column(String, nullable=True)
+    dataScadenza: Mapped[str | None] = mapped_column(String, nullable=True)
+    testo: Mapped[str] = mapped_column(Text, default="")
+    hashContenuto: Mapped[str | None] = mapped_column(String, nullable=True)  # per rilevare modifiche
+    creato: Mapped[str] = mapped_column(String)
+    aggiornato: Mapped[str] = mapped_column(String)
+
+    def dict(self):
+        return _to_dict(self)
+
+
 class Regolamento(Base):
     """Fonte normativa adottata dall'ente (regolamento, delibera, statuto...).
     Il testo vero e proprio vive nei `NormaChunk` (uno per articolo/segmento)."""

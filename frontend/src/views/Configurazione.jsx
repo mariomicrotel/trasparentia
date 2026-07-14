@@ -530,6 +530,102 @@ function LookFeelCard({ campi, canAdmin, onSalva, saving, me, toast, refresh }) 
   );
 }
 
+// ── Albo Pretorio: sincronizzazione automatica (scraping) ─────────────────────
+function AlboSyncCard({ campi, canAdmin, onSalva, saving, me, toast }) {
+  const [form, setForm] = useState({});
+  const [stato, setStato] = useState(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+
+  useEffect(() => {
+    const init = {};
+    (campi || []).forEach(c => { init[c.key] = c.valore ?? ""; });
+    setForm(init);
+  }, [campi]);
+
+  const loadStato = useCallback(() => {
+    if (canAdmin) api.alboStato(me).then(setStato).catch(() => {});
+  }, [me, canAdmin]);
+  useEffect(() => { loadStato(); }, [loadStato]);
+
+  if (!canAdmin) return null;
+
+  async function sincronizzaOra() {
+    setSyncBusy(true);
+    try {
+      const r = await api.alboSync(me);
+      if (r.skipped) toast(r.reason || "Non configurato", "");
+      else if (r.ok === false) toast(r.errore || "Errore", "");
+      else toast(`Sincronizzato: ${r.nuovi} nuovi, ${r.aggiornati} aggiornati, ${r.invariati} invariati` + (r.errori ? `, ${r.errori} errori` : ""), "success");
+      loadStato();
+    } catch (e) { toast(e.message || "Errore", ""); }
+    finally { setSyncBusy(false); }
+  }
+
+  const urlCampo = (campi || []).find(c => c.key === "ALBO_SCRAPE_URL");
+  const enabledCampo = (campi || []).find(c => c.key === "ALBO_SCRAPE_ENABLED");
+  const intervalCampo = (campi || []).find(c => c.key === "ALBO_SCRAPE_INTERVAL_MINUTES");
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card__head">
+        <Icon name="refresh" size={18} stroke={2} style={{ color: "var(--blu)" }} />
+        <h3 style={{ flex: 1 }}>Albo Pretorio — sincronizzazione automatica</h3>
+      </div>
+      <div className="card__body">
+        <p style={{ fontSize: 13.5, color: "var(--text-muted)", margin: "0 0 14px" }}>
+          Recupera periodicamente le pubblicazioni (avvisi, delibere, atti) dalla pagina di elenco del sito istituzionale e le indicizza per la ricerca e l'assistente, come riferimento — non sostituiscono il corpus normativo.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{urlCampo?.label || "URL elenco pubblicazioni"}</label>
+            <input value={form.ALBO_SCRAPE_URL || ""} onChange={e => setForm(f => ({ ...f, ALBO_SCRAPE_URL: e.target.value }))}
+                   placeholder="https://www.comune.esempio.it/EG0/EGSMISTMSIT.HBL?en=eg581&FUNZ=1"
+                   style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>{intervalCampo?.label || "Intervallo (min)"}</label>
+            <input type="number" value={form.ALBO_SCRAPE_INTERVAL_MINUTES || ""} onChange={e => setForm(f => ({ ...f, ALBO_SCRAPE_INTERVAL_MINUTES: e.target.value }))}
+                   style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, background: "var(--surface)", color: "var(--text)" }} />
+          </div>
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, marginBottom: 14 }}>
+          <input type="checkbox" checked={form.ALBO_SCRAPE_ENABLED === "true" || form.ALBO_SCRAPE_ENABLED === true}
+                 onChange={e => setForm(f => ({ ...f, ALBO_SCRAPE_ENABLED: e.target.checked }))} />
+          {enabledCampo?.label || "Sincronizzazione automatica attiva"}
+        </label>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn--primary btn--sm" disabled={saving} onClick={() => onSalva(form, () => {})}>
+            <Icon name="save" size={14} stroke={2} />{saving ? "Salvataggio…" : "Salva"}
+          </button>
+          <button className="btn btn--subtle btn--sm" disabled={syncBusy} onClick={sincronizzaOra}>
+            <Icon name="refresh" size={14} stroke={2} />{syncBusy ? "Sincronizzazione…" : "Sincronizza ora"}
+          </button>
+          {stato?.stato && (
+            <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+              {stato.stato.totale} pubblicazioni indicizzate
+              {stato.stato.ultimaSincronizzazione ? ` · ultimo aggiornamento ${stato.stato.ultimaSincronizzazione}` : ""}
+            </span>
+          )}
+        </div>
+
+        {stato?.recenti?.length > 0 && (
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
+            {stato.recenti.slice(0, 5).map(a => (
+              <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                 style={{ fontSize: 12.5, color: "var(--blu)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {a.titolo}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main view ──────────────────────────────────────────────────────────────────
 export default function Configurazione({ M, me, toast, tick, nav, refresh }) {
   const [data, setData] = useState(null);
@@ -1045,6 +1141,17 @@ export default function Configurazione({ M, me, toast, tick, nav, refresh }) {
           me={me}
           toast={toast}
           refresh={refresh}
+        />
+      )}
+
+      {canAdmin && (
+        <AlboSyncCard
+          campi={campiPerServizio["albo"] || []}
+          canAdmin={canAdmin}
+          onSalva={(form, done) => salvaServizio("albo", form, done)}
+          saving={saving === "albo"}
+          me={me}
+          toast={toast}
         />
       )}
 

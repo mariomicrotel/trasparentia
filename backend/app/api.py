@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .config import settings
-from . import models, storage, parsing, ingest, search, auth as auth_module, normativa as normativa_module
+from . import models, storage, parsing, ingest, search, auth as auth_module, normativa as normativa_module, albo_scraper
 from . import diagnostica, backup as backup_module, mailer, configurazione_cfg, importazione as imp_module, integrazione as integ_module, utenti as utenti_module
 from . import reference as R
 from .reference import day_from
@@ -1132,6 +1132,26 @@ def normativa_embed_pending(me: str = Depends(auth_user), db: Session = Depends(
     require_perm(me, "supervisione")
     n = normativa_module.embed_pending(db)
     return {"embeddati": n, **normativa_module.status(db)}
+
+
+# ---------- Albo Pretorio: sincronizzazione automatica (scraping) ----------
+@router.get("/albo")
+def albo_stato(me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_perm(me, "supervisione")
+    recenti = (db.query(models.AttoAlbo)
+                 .order_by(models.AttoAlbo.aggiornato.desc(), models.AttoAlbo.creato.desc())
+                 .limit(30).all())
+    return {"stato": albo_scraper.stato(db),
+            "recenti": [{"id": a.id, "titolo": a.titolo, "url": a.urlPagina,
+                        "dataPubblicazione": a.dataPubblicazione, "aggiornato": a.aggiornato}
+                       for a in recenti]}
+
+
+@router.post("/albo/sync")
+def albo_sync(me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Sincronizzazione manuale immediata (oltre a quella periodica in background)."""
+    require_perm(me, "supervisione")
+    return albo_scraper.sync(db)
 
 
 # ---------- assistente chat globale (RAG su piattaforma + norme + dati) ----------

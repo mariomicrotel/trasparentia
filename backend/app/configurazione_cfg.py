@@ -43,6 +43,10 @@ SCHEMA: dict[str, tuple] = {
     "LINK_AMM_TRASPARENTE":    ("lookfeel", "Amministrazione Trasparente (URL)",    "url",      False),
     "LINK_SITO_ISTITUZIONALE": ("lookfeel", "Sito istituzionale (URL)",             "url",      False),
     "LINK_URP":                ("lookfeel", "URP / Contatti (URL)",                 "url",      False),
+
+    "ALBO_SCRAPE_URL":              ("albo", "Pagina elenco pubblicazioni (mappa del sito / novità)", "url",  False),
+    "ALBO_SCRAPE_ENABLED":          ("albo", "Sincronizzazione automatica attiva",                    "bool", False),
+    "ALBO_SCRAPE_INTERVAL_MINUTES": ("albo", "Intervallo sincronizzazione (minuti)",                  "number", False),
 }
 
 _SENSITIVE = {"AI_API_KEY", "PEC_PASSWORD", "SMTP_PASSWORD"}
