@@ -1189,10 +1189,13 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     allegati = payload.get("allegati") or []
     nome_completo = " ".join(filter(None, [presentatore.get("nome", ""), presentatore.get("cognome", "")])).strip()
 
-    # Controllo formale automatico (precondizione all'invio).
+    # Controllo formale automatico (precondizione all'invio): dati + documenti.
     mancanti = sue_module.valida_modulo(procId, dati)
     if mancanti:
         raise HTTPException(422, "Campi obbligatori mancanti: " + ", ".join(mancanti))
+    doc_mancanti = sue_module.valida_documenti(procId, allegati)
+    if doc_mancanti:
+        raise HTTPException(422, "Documenti obbligatori mancanti: " + ", ".join(doc_mancanti))
 
     cui = sue_module.genera_cui(db, proc["sub_context"])
     ufficio = proc["ufficio"]

@@ -19,15 +19,28 @@ from . import models
 
 CONTEXT = "SUE"
 
-# Campi comuni a (quasi) tutti i moduli edilizi: ubicazione + dati catastali.
+# I campi del modulo digitale sono raggruppati per SEZIONE (come nella modulistica
+# edilizia unificata nazionale, Conferenza Unificata 4/5/2017). Ogni campo:
+# {key, label, tipo, required, sezione}.
 _CAMPI_BASE = [
-    {"key": "immobile_indirizzo", "label": "Ubicazione immobile (via e civico)", "tipo": "text", "required": True},
-    {"key": "catasto_foglio", "label": "Foglio catastale", "tipo": "text", "required": True},
-    {"key": "catasto_particella", "label": "Particella", "tipo": "text", "required": True},
-    {"key": "catasto_sub", "label": "Subalterno", "tipo": "text", "required": False},
-    {"key": "tecnico_nome", "label": "Tecnico incaricato", "tipo": "text", "required": True},
-    {"key": "tecnico_albo", "label": "Iscrizione albo (n. e ordine)", "tipo": "text", "required": False},
-    {"key": "descrizione", "label": "Descrizione dell'intervento", "tipo": "textarea", "required": True},
+    {"key": "titolare_qualita", "label": "In qualità di", "tipo": "select", "required": True,
+     "sezione": "Titolarità",
+     "opzioni": ["Proprietario", "Comproprietario", "Usufruttuario", "Altro avente titolo"]},
+    {"key": "titolare_residenza", "label": "Residenza del richiedente", "tipo": "text", "required": True, "sezione": "Titolarità"},
+    {"key": "immobile_indirizzo", "label": "Ubicazione immobile (via e civico)", "tipo": "text", "required": True, "sezione": "Immobile"},
+    {"key": "catasto_foglio", "label": "Foglio catastale", "tipo": "text", "required": True, "sezione": "Immobile"},
+    {"key": "catasto_particella", "label": "Particella", "tipo": "text", "required": True, "sezione": "Immobile"},
+    {"key": "catasto_sub", "label": "Subalterno", "tipo": "text", "required": False, "sezione": "Immobile"},
+    {"key": "tecnico_nome", "label": "Tecnico incaricato", "tipo": "text", "required": True, "sezione": "Progettista"},
+    {"key": "tecnico_albo", "label": "Iscrizione albo (n. e ordine)", "tipo": "text", "required": False, "sezione": "Progettista"},
+    {"key": "descrizione", "label": "Descrizione dell'intervento", "tipo": "textarea", "required": True, "sezione": "Intervento"},
+]
+
+# Documenti di base richiesti in (quasi) tutti i procedimenti.
+_DOC_BASE = [
+    {"key": "documento_identita", "label": "Copia del documento d'identità", "obbligatorio": True},
+    {"key": "elaborati_grafici", "label": "Elaborati grafici di progetto", "obbligatorio": True},
+    {"key": "relazione_asseverazione", "label": "Relazione tecnica di asseverazione", "obbligatorio": True},
 ]
 
 # Catalogo procedimenti SUE (sub_context Residenziale/Produttivo, regime, termine,
@@ -38,25 +51,71 @@ PROCEDIMENTI: dict[str, dict] = {
         "sub_context": "SUE Residenziale", "regime": "Comunicazione",
         "termineGiorni": 0, "norma": "DPR 380/2001 art. 6-bis", "ufficio": "Ufficio Tecnico",
         "campi": _CAMPI_BASE + [
-            {"key": "inizio_lavori", "label": "Data presunta inizio lavori", "tipo": "date", "required": True},
+            {"key": "inizio_lavori", "label": "Data presunta inizio lavori", "tipo": "date", "required": True, "sezione": "Intervento"},
         ],
+        "documenti": _DOC_BASE,
     },
     "scia_edilizia": {
         "nome": "SCIA edilizia",
         "sub_context": "SUE Residenziale", "regime": "SCIA",
         "termineGiorni": 30, "norma": "DPR 380/2001 art. 22-23", "ufficio": "Ufficio Tecnico",
         "campi": _CAMPI_BASE + [
-            {"key": "categoria_intervento", "label": "Categoria d'intervento (es. ristrutturazione)", "tipo": "text", "required": True},
-            {"key": "inizio_lavori", "label": "Data presunta inizio lavori", "tipo": "date", "required": True},
+            {"key": "categoria_intervento", "label": "Categoria d'intervento (es. ristrutturazione)", "tipo": "text", "required": True, "sezione": "Intervento"},
+            {"key": "inizio_lavori", "label": "Data presunta inizio lavori", "tipo": "date", "required": True, "sezione": "Intervento"},
+        ],
+        "documenti": _DOC_BASE + [
+            {"key": "doc_stato_legittimo", "label": "Documentazione dello stato legittimo dell'immobile", "obbligatorio": True},
+            {"key": "doc_fotografica", "label": "Documentazione fotografica", "obbligatorio": False},
         ],
     },
+    # ── Permesso di costruire — modellato sull'iter reale dello Sportello Unico
+    # del Cilento (DPR 380/2001 art. 20). Campi per sezione (modulistica unificata)
+    # e documenti richiesti tratti dall'elenco pubblicato dallo sportello.
     "permesso_costruire": {
         "nome": "Permesso di costruire",
         "sub_context": "SUE Residenziale", "regime": "Autorizzazione/Domanda",
-        "termineGiorni": 90, "norma": "DPR 380/2001 art. 10-20", "ufficio": "Ufficio Tecnico",
-        "campi": _CAMPI_BASE + [
-            {"key": "volumetria", "label": "Volumetria di progetto (mc)", "tipo": "text", "required": True},
-            {"key": "destinazione_uso", "label": "Destinazione d'uso", "tipo": "text", "required": True},
+        "termineGiorni": 45, "norma": "DPR 380/2001 art. 20", "ufficio": "Ufficio Tecnico",
+        "campi": [
+            # Titolarità
+            {"key": "titolare_qualita", "label": "In qualità di", "tipo": "select", "required": True, "sezione": "Titolarità",
+             "opzioni": ["Proprietario", "Comproprietario", "Usufruttuario", "Superficiario", "Altro avente titolo"]},
+            {"key": "titolare_residenza", "label": "Residenza del richiedente", "tipo": "text", "required": True, "sezione": "Titolarità"},
+            {"key": "titolare_nato", "label": "Luogo e data di nascita", "tipo": "text", "required": False, "sezione": "Titolarità"},
+            # Immobile
+            {"key": "immobile_indirizzo", "label": "Ubicazione immobile (via e civico)", "tipo": "text", "required": True, "sezione": "Immobile"},
+            {"key": "immobile_zona", "label": "Zona urbanistica (PUC/PRG)", "tipo": "text", "required": True, "sezione": "Immobile"},
+            {"key": "catasto_foglio", "label": "Foglio catastale", "tipo": "text", "required": True, "sezione": "Immobile"},
+            {"key": "catasto_particella", "label": "Particella", "tipo": "text", "required": True, "sezione": "Immobile"},
+            {"key": "catasto_sub", "label": "Subalterno", "tipo": "text", "required": False, "sezione": "Immobile"},
+            {"key": "destinazione_uso", "label": "Destinazione d'uso", "tipo": "text", "required": True, "sezione": "Immobile"},
+            {"key": "stato_legittimo", "label": "Stato legittimo (estremi titolo esistente o «ante 1967»)", "tipo": "text", "required": True, "sezione": "Immobile"},
+            # Intervento
+            {"key": "tipologia_intervento", "label": "Tipologia d'intervento", "tipo": "select", "required": True, "sezione": "Intervento",
+             "opzioni": ["Nuova costruzione", "Ristrutturazione urbanistica", "Ristrutturazione edilizia pesante", "Ampliamento", "Mutamento d'uso con opere"]},
+            {"key": "descrizione", "label": "Descrizione dell'intervento", "tipo": "textarea", "required": True, "sezione": "Intervento"},
+            {"key": "volumetria", "label": "Volumetria di progetto (mc)", "tipo": "text", "required": True, "sezione": "Intervento"},
+            {"key": "superficie_utile", "label": "Superficie utile (mq)", "tipo": "text", "required": False, "sezione": "Intervento"},
+            # Progettista e direzione lavori
+            {"key": "tecnico_nome", "label": "Progettista incaricato", "tipo": "text", "required": True, "sezione": "Progettista e DL"},
+            {"key": "tecnico_albo", "label": "Iscrizione albo (n. e ordine)", "tipo": "text", "required": True, "sezione": "Progettista e DL"},
+            {"key": "direttore_lavori", "label": "Direttore dei lavori", "tipo": "text", "required": False, "sezione": "Progettista e DL"},
+            # Impresa esecutrice (può essere comunicata prima dell'inizio lavori)
+            {"key": "impresa_denominazione", "label": "Impresa esecutrice (denominazione)", "tipo": "text", "required": False, "sezione": "Impresa esecutrice"},
+            {"key": "impresa_piva", "label": "Partita IVA impresa", "tipo": "text", "required": False, "sezione": "Impresa esecutrice"},
+        ],
+        "documenti": [
+            {"key": "richiesta_pdc", "label": "Richiesta di Permesso di costruire (modulo firmato)", "obbligatorio": True},
+            {"key": "documento_identita", "label": "Copia del documento d'identità", "obbligatorio": True},
+            {"key": "elaborati_grafici", "label": "Elaborati grafici di progetto", "obbligatorio": True},
+            {"key": "relazione_asseverazione", "label": "Relazione tecnica di asseverazione", "obbligatorio": True},
+            {"key": "doc_stato_legittimo", "label": "Documentazione dimostrativa dello stato legittimo", "obbligatorio": True},
+            {"key": "doc_fotografica", "label": "Documentazione fotografica", "obbligatorio": True},
+            {"key": "doc_tecnica_contributo", "label": "Documentazione tecnica per il conteggio del contributo", "obbligatorio": True},
+            {"key": "attestazione_contributo", "label": "Attestazione pagamento contributo di costruzione o monetizzazione", "obbligatorio": True},
+            {"key": "lettera_incarico", "label": "Lettera di affidamento incarico o contratto", "obbligatorio": True},
+            {"key": "notifica_preliminare", "label": "Notifica preliminare (se dovuta, D.Lgs. 81/2008)", "obbligatorio": False},
+            {"key": "dich_spettanze", "label": "Dichiarazione sostitutiva pagamento spettanze del committente", "obbligatorio": False},
+            {"key": "ricevuta_oblazione", "label": "Ricevuta versamento sanzione/oblazione (solo sanatoria)", "obbligatorio": False},
         ],
     },
     "agibilita": {
@@ -64,8 +123,12 @@ PROCEDIMENTI: dict[str, dict] = {
         "sub_context": "SUE Residenziale", "regime": "SCIA",
         "termineGiorni": 0, "norma": "DPR 380/2001 art. 24", "ufficio": "Ufficio Tecnico",
         "campi": _CAMPI_BASE + [
-            {"key": "titolo_edilizio", "label": "Estremi del titolo edilizio", "tipo": "text", "required": True},
-            {"key": "fine_lavori", "label": "Data fine lavori", "tipo": "date", "required": True},
+            {"key": "titolo_edilizio", "label": "Estremi del titolo edilizio", "tipo": "text", "required": True, "sezione": "Intervento"},
+            {"key": "fine_lavori", "label": "Data fine lavori", "tipo": "date", "required": True, "sezione": "Intervento"},
+        ],
+        "documenti": _DOC_BASE + [
+            {"key": "certificato_collaudo", "label": "Certificato di collaudo / regolare esecuzione", "obbligatorio": True},
+            {"key": "accatastamento", "label": "Attestazione di avvenuto accatastamento", "obbligatorio": True},
         ],
     },
     "scia_produttiva": {
@@ -73,18 +136,22 @@ PROCEDIMENTI: dict[str, dict] = {
         "sub_context": "SUE Produttivo", "regime": "SCIA",
         "termineGiorni": 30, "norma": "DPR 380/2001 · DPR 160/2010", "ufficio": "Ufficio Tecnico",
         "campi": _CAMPI_BASE + [
-            {"key": "attivita", "label": "Attività produttiva insediata", "tipo": "text", "required": True},
-            {"key": "impresa", "label": "Impresa / P.IVA", "tipo": "text", "required": True},
+            {"key": "attivita", "label": "Attività produttiva insediata", "tipo": "text", "required": True, "sezione": "Intervento"},
+            {"key": "impresa", "label": "Impresa / P.IVA", "tipo": "text", "required": True, "sezione": "Impresa esecutrice"},
+        ],
+        "documenti": _DOC_BASE + [
+            {"key": "doc_stato_legittimo", "label": "Documentazione dello stato legittimo dell'immobile", "obbligatorio": True},
         ],
     },
 }
 
 
 def catalogo() -> list[dict]:
-    """Elenco procedimenti SUE per il Front-office (senza dettagli operativi)."""
+    """Elenco procedimenti SUE per il Front-office: campi del modulo (per sezione)
+    e documenti richiesti (obbligatori/facoltativi)."""
     return [{"id": pid, "nome": p["nome"], "sub_context": p["sub_context"],
              "regime": p["regime"], "termineGiorni": p["termineGiorni"],
-             "norma": p["norma"], "campi": p["campi"]}
+             "norma": p["norma"], "campi": p["campi"], "documenti": p.get("documenti", [])}
             for pid, p in PROCEDIMENTI.items()]
 
 
@@ -109,6 +176,17 @@ def valida_modulo(procedimento_id: str, dati: dict) -> list[str]:
         if campo["required"] and not str((dati or {}).get(campo["key"], "")).strip():
             mancanti.append(campo["label"])
     return mancanti
+
+
+def valida_documenti(procedimento_id: str, allegati: list[dict]) -> list[str]:
+    """Verifica che tutti i documenti OBBLIGATORI del procedimento siano allegati.
+    `allegati` = [{tipoDoc, nome, ...}]. Ritorna le etichette dei documenti mancanti."""
+    proc = PROCEDIMENTI.get(procedimento_id)
+    if not proc:
+        return []
+    presenti = {a.get("tipoDoc") for a in (allegati or []) if a.get("tipoDoc")}
+    return [d["label"] for d in proc.get("documenti", [])
+            if d["obbligatorio"] and d["key"] not in presenti]
 
 
 def crea_istanza(db, procedimento_id: str, presentatore: dict, dati: dict,

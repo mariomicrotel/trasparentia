@@ -20,9 +20,41 @@ export function CampoModulo({ campo, valore, onChange }) {
       </label>
       {campo.tipo === "textarea" ? (
         <textarea rows={3} style={{ ...base, resize: "vertical" }} value={valore || ""} onChange={e => onChange(e.target.value)} />
+      ) : campo.tipo === "select" ? (
+        <select style={base} value={valore || ""} onChange={e => onChange(e.target.value)}>
+          <option value="">— seleziona —</option>
+          {(campo.opzioni || []).map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
       ) : (
         <input type={campo.tipo === "date" ? "date" : "text"} style={base} value={valore || ""} onChange={e => onChange(e.target.value)} />
       )}
+    </div>
+  );
+}
+
+// Riga di un documento richiesto: badge obbligatorio/facoltativo + selezione file.
+function RigaDocumento({ doc, allegato, onFile }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
+                  border: "1px solid var(--border)", background: allegato ? "var(--verde-bg, #f0faf4)" : "var(--surface)" }}>
+      <Icon name={allegato ? "checkCircle" : "fileText"} size={16} stroke={2}
+            style={{ color: allegato ? "var(--verde)" : "var(--text-muted)", flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>
+          {doc.label}
+          <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 8, padding: "1px 6px", borderRadius: 4,
+                         background: doc.obbligatorio ? "var(--rosso-bg, #fdecec)" : "var(--surface-2, #eef1f5)",
+                         color: doc.obbligatorio ? "var(--rosso, #a62c2c)" : "var(--text-muted)" }}>
+            {doc.obbligatorio ? "OBBLIGATORIO" : "facoltativo"}
+          </span>
+        </div>
+        {allegato && <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{allegato.nome} · {Math.round((allegato.size || 0) / 1024)} KB</div>}
+      </div>
+      <label className="btn btn--subtle btn--sm" style={{ cursor: "pointer", flexShrink: 0 }}>
+        <Icon name="upload" size={13} stroke={2} />{allegato ? "Sostituisci" : "Allega"}
+        <input type="file" style={{ display: "none" }}
+               onChange={e => { const f = e.target.files?.[0]; if (f) onFile({ tipoDoc: doc.key, label: doc.label, nome: f.name, size: f.size }); }} />
+      </label>
     </div>
   );
 }
@@ -32,6 +64,7 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
   const [procId, setProcId] = useState("");
   const [email, setEmail] = useState(identita?.email || "");
   const [dati, setDati] = useState({});
+  const [allegati, setAllegati] = useState({});   // tipoDoc → {tipoDoc,label,nome,size}
   const [busy, setBusy] = useState(false);
   const [esito, setEsito] = useState(null);
 
@@ -39,19 +72,22 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
 
   const proc = (cat || []).find(p => p.id === procId);
 
-  function scegli(id) { setProcId(id); setDati({}); setEsito(null); }
+  function scegli(id) { setProcId(id); setDati({}); setAllegati({}); setEsito(null); }
 
   async function invia() {
     const presentatore = { nome: identita.nome, cognome: identita.cognome, cf: identita.cf, email };
     setBusy(true);
     try {
-      const r = await api.sueCreaIstanza({ procedimento: procId, presentatore, dati });
+      const r = await api.sueCreaIstanza({ procedimento: procId, presentatore, dati, allegati: Object.values(allegati) });
       setEsito(r);
       toast(`Istanza presentata — CUI ${r.cui}`, "success");
       onFatto && onFatto();
     } catch (e) { toast(e.message || "Errore", ""); }
     finally { setBusy(false); }
   }
+
+  // Documenti obbligatori mancanti (per abilitare/spiegare il pulsante Invia).
+  const docObblMancanti = (proc?.documenti || []).filter(d => d.obbligatorio && !allegati[d.key]);
 
   if (esito) {
     return (
@@ -65,7 +101,7 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", maxWidth: 460, margin: "10px auto 0" }}>
           L'istanza è stata protocollata e assegnata all'Ufficio Tecnico per l'istruttoria di back-office.
         </p>
-        <button className="btn btn--subtle" style={{ marginTop: 16 }} onClick={() => { setEsito(null); setProcId(""); setDati({}); }}>
+        <button className="btn btn--subtle" style={{ marginTop: 16 }} onClick={() => { setEsito(null); setProcId(""); setDati({}); setAllegati({}); }}>
           <Icon name="plus" size={15} stroke={2} />Presenta un'altra istanza
         </button>
       </div></div>
@@ -115,19 +151,45 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
               <CampoModulo campo={{ label: "Email per le comunicazioni", tipo: "text" }} valore={email} onChange={setEmail} />
             </div>
 
-            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "6px 0 8px" }}>Modulo digitale</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {proc.campi.map(c => (
-                <div key={c.key} style={{ gridColumn: c.tipo === "textarea" ? "1 / -1" : "auto" }}>
-                  <CampoModulo campo={c} valore={dati[c.key]} onChange={v => setDati(d => ({ ...d, [c.key]: v }))} />
+            {/* Modulo digitale, raggruppato per sezione (modulistica unificata). */}
+            {[...new Set(proc.campi.map(c => c.sezione || "Dati"))].map(sez => (
+              <div key={sez} style={{ marginBottom: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "10px 0 8px" }}>{sez}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {proc.campi.filter(c => (c.sezione || "Dati") === sez).map(c => (
+                    <div key={c.key} style={{ gridColumn: c.tipo === "textarea" ? "1 / -1" : "auto" }}>
+                      <CampoModulo campo={c} valore={dati[c.key]} onChange={v => setDati(d => ({ ...d, [c.key]: v }))} />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
 
-            <div style={{ marginTop: 18, display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Documenti da allegare. */}
+            {(proc.documenti || []).length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "10px 0 8px" }}>
+                  Documenti da allegare
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {proc.documenti.map(doc => (
+                    <RigaDocumento key={doc.key} doc={doc} allegato={allegati[doc.key]}
+                      onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 18, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn btn--primary" disabled={busy || !identita} onClick={invia}>
                 <Icon name="send" size={15} stroke={2} />{busy ? "Invio…" : "Invia istanza"}
               </button>
+              {docObblMancanti.length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 }}>
+                  <Icon name="alertCircle" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                  {docObblMancanti.length} document{docObblMancanti.length === 1 ? "o" : "i"} obbligatori{docObblMancanti.length === 1 ? "o" : ""} da allegare
+                </span>
+              )}
               <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                 <Icon name="info" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
                 Prototipo: firma e Catalogo SSU nazionale sono simulati.
