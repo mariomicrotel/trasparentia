@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Icon } from "./icons.jsx";
 
-// Simulazione dell'accesso SPID/CIE per il portale pubblico SUE (prototipo).
+// Simulazione dell'accesso SPID/CIE/CNS per il portale pubblico SUE (prototipo).
 // Nel sistema reale l'utente verrebbe reindirizzato all'Identity Provider (SPID)
-// o all'app CIE, che restituiscono un'identità VERIFICATA (nome, cognome, codice
-// fiscale) via SAML/OIDC — il cittadino non la digita, la conferma soltanto.
-// Qui simuliamo lo stesso flusso in due passi: scelta del provider → conferma
-// dei dati restituiti (mock, editabili solo per poter testare nominativi diversi).
+// o autenticato tramite l'app/carta CIE o il certificato della CNS (Carta
+// Nazionale dei Servizi / TS-CNS), che restituiscono un'identità VERIFICATA
+// (nome, cognome, codice fiscale) — il cittadino non la digita, la conferma
+// soltanto. Qui simuliamo lo stesso flusso in due passi: scelta del metodo →
+// conferma dei dati (mock, editabili solo per poter testare nominativi diversi).
 
 const PROVIDER_SPID = [
   { id: "poste", nome: "Poste ID" },
@@ -14,6 +15,9 @@ const PROVIDER_SPID = [
   { id: "tim", nome: "TIM id" },
   { id: "infocert", nome: "InfoCert ID" },
 ];
+
+// Colore istituzionale per metodo di accesso.
+const METODO_COLORE = { SPID: "#00825A", CIE: "#1256A3", CNS: "#6C4F9C" };
 
 function AssertionForm({ metodo, provider, onConferma, onAnnulla }) {
   const [nome, setNome] = useState("");
@@ -30,11 +34,13 @@ function AssertionForm({ metodo, provider, onConferma, onAnnulla }) {
   return (
     <div style={{ maxWidth: 420, margin: "0 auto", background: "#fff", borderRadius: 12, padding: "28px 26px", boxShadow: "0 2px 16px rgba(0,0,0,.08)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <Icon name="shield" size={20} stroke={2} style={{ color: metodo === "SPID" ? "#00825A" : "#1256A3" }} />
+        <Icon name={metodo === "CNS" ? "card" : "shield"} size={20} stroke={2} style={{ color: METODO_COLORE[metodo] || "#1256A3" }} />
         <div style={{ fontWeight: 700, fontSize: 15 }}>{provider} — {metodo}</div>
       </div>
       <p style={{ fontSize: 12.5, color: "#6b7280", margin: "0 0 18px" }}>
-        Simulazione: nel sistema reale questi dati arriverebbero già verificati dal provider {metodo}, senza doverli digitare. Qui li imposti tu per poter testare nominativi diversi.
+        {metodo === "CNS"
+          ? "Simulazione: nel sistema reale questi dati sarebbero letti dal certificato della tua CNS (smart card + PIN), senza doverli digitare. Qui li imposti tu per poter testare nominativi diversi."
+          : `Simulazione: nel sistema reale questi dati arriverebbero già verificati dal provider ${metodo}, senza doverli digitare. Qui li imposti tu per poter testare nominativi diversi.`}
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div>
@@ -66,17 +72,24 @@ function AssertionForm({ metodo, provider, onConferma, onAnnulla }) {
 }
 
 function ProviderPicker({ metodo, onScegli, onIndietro }) {
-  const lista = metodo === "SPID" ? PROVIDER_SPID : [{ id: "cie", nome: "Carta d'Identità Elettronica" }];
+  const lista = metodo === "SPID" ? PROVIDER_SPID
+    : metodo === "CNS" ? [{ id: "cns", nome: "Carta Nazionale dei Servizi (TS-CNS)" }]
+    : [{ id: "cie", nome: "Carta d'Identità Elettronica" }];
+  const titolo = metodo === "SPID" ? "Scegli il tuo gestore SPID"
+    : metodo === "CNS" ? "Accesso con CNS" : "Accesso con CIE";
+  const iconaVoce = metodo === "SPID" ? "user" : metodo === "CNS" ? "card" : "shield";
   return (
     <div style={{ maxWidth: 420, margin: "0 auto", background: "#fff", borderRadius: 12, padding: "28px 26px", boxShadow: "0 2px 16px rgba(0,0,0,.08)" }}>
-      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-        {metodo === "SPID" ? "Scegli il tuo gestore SPID" : "Accesso con CIE"}
-      </div>
-      <p style={{ fontSize: 12.5, color: "#6b7280", margin: "0 0 18px" }}>Simulazione — nessun dato reale viene inviato a un provider esterno.</p>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{titolo}</div>
+      <p style={{ fontSize: 12.5, color: "#6b7280", margin: "0 0 18px" }}>
+        {metodo === "CNS"
+          ? "Simulazione — nel sistema reale serve la smart card inserita nel lettore e il PIN."
+          : "Simulazione — nessun dato reale viene inviato a un provider esterno."}
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {lista.map(p => (
           <button key={p.id} className="btn btn--subtle" style={{ justifyContent: "flex-start" }} onClick={() => onScegli(p.nome)}>
-            <Icon name={metodo === "SPID" ? "user" : "shield"} size={16} stroke={2} />{p.nome}
+            <Icon name={iconaVoce} size={16} stroke={2} />{p.nome}
           </button>
         ))}
       </div>
@@ -108,7 +121,7 @@ export default function MockSpidLogin({ onIdentita }) {
       <Icon name="lock" size={32} stroke={1.8} style={{ color: "#0066cc" }} />
       <h2 style={{ fontSize: 17, margin: "12px 0 6px" }}>Accedi per presentare un'istanza</h2>
       <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 22px" }}>
-        L'accesso allo Sportello Unico per l'Edilizia richiede identità digitale SPID o CIE.
+        L'accesso allo Sportello Unico per l'Edilizia richiede identità digitale SPID, CIE o CNS.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button onClick={() => { setMetodo("SPID"); setStep("provider"); }}
@@ -119,9 +132,13 @@ export default function MockSpidLogin({ onIdentita }) {
           style={{ background: "#1256A3", color: "#fff", border: "none", borderRadius: 24, padding: "12px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <Icon name="shield" size={17} stroke={2.2} />Entra con CIE
         </button>
+        <button onClick={() => { setMetodo("CNS"); setStep("provider"); }}
+          style={{ background: "#6C4F9C", color: "#fff", border: "none", borderRadius: 24, padding: "12px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Icon name="card" size={17} stroke={2.2} />Entra con CNS
+        </button>
       </div>
       <p style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 18 }}>
-        Prototipo dimostrativo: qui l'identità è simulata, non è una vera autenticazione SPID/CIE.
+        Prototipo dimostrativo: qui l'identità è simulata, non è una vera autenticazione SPID/CIE/CNS.
       </p>
     </div>
   );
