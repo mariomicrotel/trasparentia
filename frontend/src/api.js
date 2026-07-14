@@ -191,6 +191,12 @@ export const api = {
   // (il presentatore è un cittadino/tecnico esterno, non personale dell'ente).
   sueProcedimenti: () => req("GET", "/api/sue/procedimenti"),
   sueCreaIstanza: (payload) => req("POST", "/api/sue/istanze", payload),
+  sueUploadAllegato: (tipoDoc, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("tipoDoc", tipoDoc);
+    return upload("/api/sue/allegati", fd);
+  },
   // Back-office: richiede login staff (require_any_perm lato backend).
   sueIstanze: (me) => req("GET", "/api/sue/istanze", null, me),
   sueDettaglio: (cui, me) => req("GET", `/api/sue/istanze/${encodeURIComponent(cui)}`, null, me),

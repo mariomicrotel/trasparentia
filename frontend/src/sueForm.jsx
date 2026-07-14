@@ -33,11 +33,27 @@ export function CampoModulo({ campo, valore, onChange }) {
 }
 
 // Riga di un documento richiesto: badge obbligatorio/facoltativo + selezione file.
-function RigaDocumento({ doc, allegato, onFile }) {
+// Il file viene CARICATO subito su MinIO (endpoint pubblico): si ottiene il
+// documentoId con cui l'allegato sarà agganciato all'istanza all'invio.
+function RigaDocumento({ doc, allegato, onFile, onErrore }) {
+  const [busy, setBusy] = useState(false);
+
+  async function scegliFile(f) {
+    if (!f) return;
+    setBusy(true);
+    try {
+      const r = await api.sueUploadAllegato(doc.key, f);
+      onFile({ tipoDoc: doc.key, label: doc.label, nome: r.nome, size: r.size,
+               contentType: r.contentType, documentoId: r.documentoId });
+    } catch (e) {
+      onErrore && onErrore(e.message || "Caricamento non riuscito");
+    } finally { setBusy(false); }
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
                   border: "1px solid var(--border)", background: allegato ? "var(--verde-bg, #f0faf4)" : "var(--surface)" }}>
-      <Icon name={allegato ? "checkCircle" : "fileText"} size={16} stroke={2}
+      <Icon name={busy ? "loader" : allegato ? "checkCircle" : "fileText"} size={16} stroke={2}
             style={{ color: allegato ? "var(--verde)" : "var(--text-muted)", flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -48,12 +64,13 @@ function RigaDocumento({ doc, allegato, onFile }) {
             {doc.obbligatorio ? "OBBLIGATORIO" : "facoltativo"}
           </span>
         </div>
-        {allegato && <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{allegato.nome} · {Math.round((allegato.size || 0) / 1024)} KB</div>}
+        {busy && <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Caricamento…</div>}
+        {!busy && allegato && <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{allegato.nome} · {Math.round((allegato.size || 0) / 1024)} KB · caricato</div>}
       </div>
-      <label className="btn btn--subtle btn--sm" style={{ cursor: "pointer", flexShrink: 0 }}>
+      <label className="btn btn--subtle btn--sm" style={{ cursor: busy ? "default" : "pointer", flexShrink: 0, opacity: busy ? .6 : 1 }}>
         <Icon name="upload" size={13} stroke={2} />{allegato ? "Sostituisci" : "Allega"}
-        <input type="file" style={{ display: "none" }}
-               onChange={e => { const f = e.target.files?.[0]; if (f) onFile({ tipoDoc: doc.key, label: doc.label, nome: f.name, size: f.size }); }} />
+        <input type="file" disabled={busy} style={{ display: "none" }}
+               onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; scegliFile(f); }} />
       </label>
     </div>
   );
@@ -174,7 +191,8 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {proc.documenti.map(doc => (
                     <RigaDocumento key={doc.key} doc={doc} allegato={allegati[doc.key]}
-                      onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))} />
+                      onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))}
+                      onErrore={(m) => toast(m, "")} />
                   ))}
                 </div>
               </div>

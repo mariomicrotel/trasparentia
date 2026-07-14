@@ -1174,6 +1174,42 @@ def sue_procedimenti():
     return {"context": "SUE", "procedimenti": sue_module.catalogo()}
 
 
+@router.post("/sue/allegati")
+async def sue_upload_allegato(
+    file: UploadFile = File(...),
+    tipoDoc: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Front-office: caricamento di un singolo allegato dell'istanza SUE. PUBBLICO
+    (come gli altri endpoint FO). Salva il file su MinIO, ne estrae il testo (OCR
+    se serve) creando un Documento, e restituisce i metadati con cui il modulo
+    aggancerà l'allegato all'istanza al momento dell'invio.
+    Prototipo: in produzione servirebbe identità SPID/CIE + anti-abuso (rate
+    limit/antivirus) prima di esporre l'upload su internet."""
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File '{file.filename}' supera il limite di 20 MB")
+    fname = file.filename or "allegato"
+    ct = file.content_type or "application/octet-stream"
+    ext = parsing.extract_text(fname, ct, data)
+
+    key = f"sue/allegati/{uuid.uuid4().hex}/{fname}"
+    stored = storage.put(key, data, ct)
+    did = uuid.uuid4().hex
+    doc = models.Documento(
+        id=did, filename=fname, contentType=ct, size=len(data),
+        objectKey=key if stored else None, ocr=ext.get("ocr", False),
+        chars=len(ext.get("text", "")),
+        stato="eccezione" if ext.get("error") else "acquisito",
+        errore=ext.get("error"), creato=_now_iso(), testo=ext.get("text", ""),
+    )
+    db.add(doc)
+    db.commit()
+    return {"documentoId": did, "tipoDoc": tipoDoc, "nome": fname,
+            "size": len(data), "contentType": ct, "ocr": doc.ocr,
+            "chars": doc.chars, "stored": bool(stored)}
+
+
 @router.post("/sue/istanze")
 def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     """Front-office: presentazione di un'istanza SUE. Valida il modulo, genera il
@@ -1228,10 +1264,17 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     db.commit()
     db.refresh(ist)
 
-    # Indicizzazione per ricerca/assistente (istanza + modulo).
+    # Indicizzazione per ricerca/assistente (istanza + modulo + testo allegati).
     try:
+        doc_ids = [a.get("documentoId") for a in allegati if a.get("documentoId")]
+        testi_allegati = []
+        for did in doc_ids:
+            d = db.get(models.Documento, did)
+            if d and d.testo:
+                testi_allegati.append(d.testo)
         testo = " ".join([oggetto, proc["regime"], proc["norma"],
-                          " ".join(f"{k}: {v}" for k, v in (dati or {}).items())])
+                          " ".join(f"{k}: {v}" for k, v in (dati or {}).items()),
+                          " ".join(testi_allegati)])
         search.index_one(db, "istanza_sue", cui, oggetto, testo)
     except Exception:
         pass

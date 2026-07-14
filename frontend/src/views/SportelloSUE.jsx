@@ -19,23 +19,47 @@ function Istanze({ me, nav, tick }) {
   return (
     <div className="card"><div className="card__body">
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {ist.map(i => (
-          <div key={i.cui} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
-            <Icon name="building" size={20} stroke={1.9} style={{ color: "var(--blu)", flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i.procedimento}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                CUI <span className="mono">{i.cui}</span> · {i.regime} · {i.subContext} · presentata {fmtDate(i.creato)}
-                {i.presentatoreNome || i.presentatoreCognome ? ` · ${[i.presentatoreNome, i.presentatoreCognome].filter(Boolean).join(" ")}` : ""}
+        {ist.map(i => {
+          const allegati = (i.allegati || []).filter(a => a && a.nome);
+          return (
+          <div key={i.cui} style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Icon name="building" size={20} stroke={1.9} style={{ color: "var(--blu)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i.procedimento}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  CUI <span className="mono">{i.cui}</span> · {i.regime} · {i.subContext} · presentata {fmtDate(i.creato)}
+                  {i.presentatoreNome || i.presentatoreCognome ? ` · ${[i.presentatoreNome, i.presentatoreCognome].filter(Boolean).join(" ")}` : ""}
+                </div>
               </div>
+              {i.praticaId && (
+                <button className="btn btn--subtle btn--sm" onClick={() => nav("pratica", { id: i.praticaId })}>
+                  <Icon name="folder" size={13} stroke={2} />Pratica {i.praticaId}
+                </button>
+              )}
             </div>
-            {i.praticaId && (
-              <button className="btn btn--subtle btn--sm" onClick={() => nav("pratica", { id: i.praticaId })}>
-                <Icon name="folder" size={13} stroke={2} />Pratica {i.praticaId}
-              </button>
+            {allegati.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 6 }}>
+                  Documenti allegati ({allegati.length})
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {allegati.map((a, k) => a.documentoId ? (
+                    <a key={k} href={api.docFileUrl(a.documentoId)} target="_blank" rel="noopener noreferrer"
+                       className="btn btn--subtle btn--sm" title={`${a.label || a.tipoDoc} — ${a.nome}`}>
+                      <Icon name="fileText" size={13} stroke={2} />{a.label || a.nome}
+                    </a>
+                  ) : (
+                    <span key={k} className="btn btn--subtle btn--sm" style={{ opacity: .6, cursor: "default" }} title={a.nome}>
+                      <Icon name="fileText" size={13} stroke={2} />{a.label || a.nome}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div></div>
   );
