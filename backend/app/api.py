@@ -1163,16 +1163,23 @@ def albo_sync(me: str = Depends(auth_user), db: Session = Depends(get_db)):
 
 
 # ---------- Sportello Unico Edilizia (SUE) — prototipo FO+BO integrati ----------
+# Gli endpoint di Front-office (procedimenti, creazione istanza) sono PUBBLICI:
+# il presentatore è un cittadino/tecnico esterno, non personale dell'ente — non
+# ha e non deve avere credenziali di staff. Nel sistema reale l'identità sarebbe
+# SPID/CIE; qui è auto-dichiarata (mock, coerente con la scelta "prototipo").
+# Gli endpoint di Back-office restano protetti (require_any_perm) più sotto.
 @router.get("/sue/procedimenti")
-def sue_procedimenti(me: str = Depends(auth_user)):
+def sue_procedimenti():
     """Catalogo dei procedimenti SUE (Front-office). Mock del Catalogo SSU."""
     return {"context": "SUE", "procedimenti": sue_module.catalogo()}
 
 
 @router.post("/sue/istanze")
-def sue_crea_istanza(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     """Front-office: presentazione di un'istanza SUE. Valida il modulo, genera il
-    CUI, crea l'istanza e la aggancia a una Pratica per l'istruttoria di Back-office."""
+    CUI, crea l'istanza e la aggancia a una Pratica per l'istruttoria di Back-office.
+    Prototipo: in produzione servirebbe identità SPID/CIE reale e una protezione
+    anti-abuso (rate limit/captcha) prima di esporre l'endpoint su internet."""
     procId = (payload.get("procedimento") or "").strip()
     proc = sue_module.PROCEDIMENTI.get(procId)
     if not proc:

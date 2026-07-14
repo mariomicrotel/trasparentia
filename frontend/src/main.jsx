@@ -15,7 +15,19 @@ import "./styles.css";
 import App from "./App.jsx";
 import { setTokenProvider } from "./api.js";
 
+// Path pubblici che NON richiedono autenticazione (interna né Keycloak): il
+// Front-office SUE è per cittadini/tecnici esterni, senza credenziali di staff.
+// Il check va fatto qui, PRIMA di un eventuale initKeycloak(), che altrimenti
+// forzerebbe il login anche su questa pagina.
+const PUBLIC_PATHS = ["/sportello-sue"];
+const isPublicPath = PUBLIC_PATHS.some((p) => window.location.pathname.startsWith(p));
+
 async function bootstrap() {
+  if (isPublicPath) {
+    createRoot(document.getElementById("root")).render(<App authMode="demo" />);
+    return;
+  }
+
   let kcEnabled = false;
   let kcUsername = null;
   let kcLogout = null;

@@ -187,8 +187,11 @@ export const api = {
   alboSync: (me) => req("POST", "/api/albo/sync", null, me),
 
   // Sportello Unico Edilizia (SUE) — prototipo FO+BO
-  sueProcedimenti: (me) => req("GET", "/api/sue/procedimenti", null, me),
-  sueCreaIstanza: (payload, me) => req("POST", "/api/sue/istanze", payload, me),
+  // Front-office: endpoint PUBBLICI lato backend, nessun token/ruolo richiesto
+  // (il presentatore è un cittadino/tecnico esterno, non personale dell'ente).
+  sueProcedimenti: () => req("GET", "/api/sue/procedimenti"),
+  sueCreaIstanza: (payload) => req("POST", "/api/sue/istanze", payload),
+  // Back-office: richiede login staff (require_any_perm lato backend).
   sueIstanze: (me) => req("GET", "/api/sue/istanze", null, me),
   sueDettaglio: (cui, me) => req("GET", `/api/sue/istanze/${encodeURIComponent(cui)}`, null, me),
 

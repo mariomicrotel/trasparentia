@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api, setCurrentUser, saveNativeToken, clearNativeToken, setOn401Handler } from "./api.js";
 import Login from "./views/Login.jsx";
+import PortaleSUEPubblico from "./views/PortaleSUEPubblico.jsx";
 import { Icon } from "./icons.jsx";
 import { setMeta, Avatar } from "./ui.jsx";
 import { NotifPanel } from "./views/Notifiche.jsx";
@@ -167,6 +168,14 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     toast(`Ruolo: ${M.users[r].ruolo}`, "");
   }
 
+  // Portale pubblico SUE (Front-office): nessun login richiesto, in nessuna
+  // modalità di autenticazione — il presentatore è un cittadino/tecnico esterno,
+  // non personale dell'ente. Il bypass per Keycloak è già in main.jsx (che qui
+  // non arriverebbe nemmeno a inizializzarlo per questo path).
+  if (window.location.pathname.startsWith("/sportello-sue")) {
+    return <PortaleSUEPubblico />;
+  }
+
   // Native auth: mostra login se non autenticato
   if (authMode === "native" && !nativeUser) {
     return (
@@ -256,7 +265,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     { k: "inbox",        lbl: "Comunicazioni",         ico: "mail",     badge: counts.daLavorare },
     { k: "scadenziario", lbl: "Pratiche",              ico: "folder",   badge: counts.inRitardo, alert: true },
     { k: "atti",         lbl: "Atti & bozze",          ico: "fileText", badge: counts.daFirmare },
-    { k: "sue",          lbl: "Sportello Edilizia (SUE)", ico: "building" },
+    { k: "sue",          lbl: "SUE — Back-office",      ico: "building" },
     { g: "Patrimonio" },
     { k: "inventario",   lbl: "Inventario beni",       ico: "box" },
     { g: "Sistema" },
