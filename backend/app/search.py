@@ -175,12 +175,23 @@ _STOP = {"il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "del", "d
          "della", "dei", "degli", "delle", "dell", "e", "ed", "o", "che", "chi", "come",
          "cosa", "quale", "quali", "quando", "quanto", "per", "con", "su", "in", "a", "al",
          "allo", "alla", "ai", "agli", "alle", "da", "dal", "è", "sono", "essere", "fare",
-         "mi", "si", "ci", "non", "più", "me", "tra", "fra", "questo", "questa"}
+         "mi", "si", "ci", "non", "più", "me", "tra", "fra", "questo", "questa",
+         # contrazioni preposizionali e verbi/parole comuni a bassissimo segnale
+         "sul", "sullo", "sulla", "sui", "sugli", "sulle", "nel", "nello", "nella",
+         "nei", "negli", "nelle", "col", "coi", "prevede", "prevedono", "riguarda",
+         "vuole", "deve", "puo", "può", "sua", "suo", "loro", "anche", "ogni"}
 
 
 def _termini(query: str) -> list[str]:
     toks = _re.findall(r"[a-zA-Zàèéìòùáí0-9]{3,}", (query or "").lower())
     return [t for t in toks if t not in _STOP]
+
+
+def _e_forte(t: str) -> bool:
+    """Un termine è "forte" (può ancorare un documento) se NON è puramente
+    numerico: anni e numeri sparsi ("2025", "2026") combaciano con troppi titoli/
+    testi (es. «PIAO 2026-2028») senza indicare il vero argomento della domanda."""
+    return not t.isdigit()
 
 
 def _norma_rif_titolo(r) -> tuple[str, str]:
@@ -239,16 +250,19 @@ def norme_lessicali(db, query: str, k: int = 5, max_char: int = 1400) -> list[di
     #  - almeno 2 termini della domanda CO-OCCORRONO nello stesso chunk
     #    (es. «limite/spesa/personale» del PIAO), evitando i match sparsi di una
     #    sola parola comune («stati» qua, «pratica» là).
-    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in specifici]
+    # (pattern, è_forte): solo i termini FORTI (non numerici) possono ANCORARE un
+    # documento; i numeri/anni contribuiscono solo al ranking, mai alla qualifica.
+    pats = [(_re.compile(rf"\b{_re.escape(t)}\b"), _e_forte(t)) for t in specifici]
 
     def valuta(r):
         intest = f"{r.regolamento} {r.rubrica or ''}".lower()
         blob = f"{intest} {r.testo}".lower()
-        title_hit = any(p.search(intest) for p in pats)
-        body_hits = sum(1 for p in pats if p.search(blob))
-        qualifica = title_hit or body_hits >= 2
-        # rank: prima i match nel titolo, poi per numero di termini
-        return qualifica, (1 if title_hit else 0, body_hits)
+        title_hit = any(p.search(intest) for p, forte in pats if forte)
+        body_forti = sum(1 for p, forte in pats if forte and p.search(blob))
+        qualifica = title_hit or body_forti >= 2
+        score_tot = sum(1 for p, _ in pats if p.search(blob))  # ranking: tutti i match
+        # rank: prima i match nel titolo, poi n. termini forti, poi n. termini totali
+        return qualifica, (1 if title_hit else 0, body_forti, score_tot)
 
     valutati = [(r, *valuta(r)) for r in rows]
     valutati = [(r, rank) for (r, ok, rank) in valutati if ok]

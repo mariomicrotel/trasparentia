@@ -1169,14 +1169,15 @@ def assistente(payload: dict = Body(...), me: str = Depends(auth_user), db: Sess
     # sola guida, senza attaccare regolamenti/atti a caso.
     norme = search.contesto_normativo_ibrido(db, domanda, k=4)
     # Operativi: semantica ravvicinata, poi tieni solo chi contiene un termine
-    # della domanda a PAROLA INTERA (evita atti/comunicazioni non pertinenti e
-    # i falsi match a sottostringa).
+    # FORTE (non numerico) della domanda a parola intera. Escludendo i numeri/anni
+    # si evita che «2025»/«2026» aggancino atti non pertinenti (Referendum, Festa…).
     import re as _re
-    pats = [_re.compile(rf"\b{_re.escape(t)}\b") for t in search._termini(domanda)]
+    pats = [_re.compile(rf"\b{_re.escape(t)}\b")
+            for t in search._termini(domanda) if search._e_forte(t)]
     generali = []
     for g in search.contesto_per(db, domanda, k=4, max_dist=0.34):
         blob = f"{g['titolo']} {g['testo']}".lower()
-        if any(p.search(blob) for p in pats):
+        if pats and any(p.search(blob) for p in pats):
             g["tipo"] = "operativo"
             generali.append(g)
         if len(generali) >= 3:
