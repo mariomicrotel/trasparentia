@@ -68,6 +68,12 @@ services:
       PEC_FOLDER: ${PEC_FOLDER:-INBOX}
       OCR_ENABLED: ${OCR_ENABLED:-true}
       ENTE_NOME: ${ENTE_NOME:-Comune di Roccadaspide}
+      # Link istituzionali (scritti dall'interfaccia nel .env montato sotto)
+      ENV_FILE_PATH: /app/.env
+      LINK_ALBO_PRETORIO: ${LINK_ALBO_PRETORIO:-}
+      LINK_AMM_TRASPARENTE: ${LINK_AMM_TRASPARENTE:-}
+      LINK_SITO_ISTITUZIONALE: ${LINK_SITO_ISTITUZIONALE:-}
+      LINK_URP: ${LINK_URP:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -104,6 +110,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - backupdata:/data/backup
+      - ./.env:/app/.env   # scrivibile dall'interfaccia per i link istituzionali
     ports:
       - "8008:8000"   # debug diretto; in produzione rimuovere, usare solo Caddy
 

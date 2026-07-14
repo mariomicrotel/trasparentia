@@ -47,6 +47,14 @@ SCHEMA: dict[str, tuple] = {
 
 _SENSITIVE = {"AI_API_KEY", "PEC_PASSWORD", "SMTP_PASSWORD"}
 
+# Chiavi persistite direttamente nel file .env (non nel DB): l'interfaccia le
+# scrive lì, così sono la sorgente di verità visibile nel deployment. Applicate
+# comunque live all'atto del salvataggio (effetto immediato senza riavvio).
+_ENV_PERSIST = {
+    "LINK_ALBO_PRETORIO", "LINK_AMM_TRASPARENTE",
+    "LINK_SITO_ISTITUZIONALE", "LINK_URP",
+}
+
 
 def _live_val(key: str) -> str:
     v = getattr(settings, key, "")
@@ -69,9 +77,11 @@ def leggi_tutte(db) -> dict:
 
 
 def salva(db, cambiamenti: dict) -> dict:
-    """Salva le modifiche nel DB e le applica live al settings object."""
+    """Salva le modifiche e le applica live al settings object. Le chiavi in
+    _ENV_PERSIST vengono scritte nel file .env (non nel DB); le altre nel DB."""
     oggi = date.today().isoformat()
     cambiati: list[str] = []
+    env_updates: dict[str, str] = {}
     riavvio = False
     for key, val in cambiamenti.items():
         if key not in SCHEMA:
@@ -81,23 +91,46 @@ def salva(db, cambiamenti: dict) -> dict:
         if SCHEMA[key][3]:
             riavvio = True
         str_val = str(val)
-        row = db.query(models.ImpostazioneConfig).filter(
-            models.ImpostazioneConfig.chiave == key
-        ).first()
-        if row:
-            row.valore = str_val
-            row.modificata = oggi
+        if key in _ENV_PERSIST:
+            env_updates[key] = str_val
+            # Rimuovi un eventuale override DB residuo: la sorgente è il .env.
+            db.query(models.ImpostazioneConfig).filter(
+                models.ImpostazioneConfig.chiave == key
+            ).delete(synchronize_session=False)
         else:
-            db.add(models.ImpostazioneConfig(chiave=key, valore=str_val, modificata=oggi))
+            row = db.query(models.ImpostazioneConfig).filter(
+                models.ImpostazioneConfig.chiave == key
+            ).first()
+            if row:
+                row.valore = str_val
+                row.modificata = oggi
+            else:
+                db.add(models.ImpostazioneConfig(chiave=key, valore=str_val, modificata=oggi))
         cambiati.append(key)
+
+    avviso = None
+    if env_updates:
+        try:
+            from .env_file import scrivi
+            scrivi(settings.ENV_FILE_PATH, env_updates)
+        except Exception as e:
+            # Non fatale: applichiamo comunque live; segnaliamo che il .env non
+            # è scrivibile (es. mount mancante) → non persisterà al riavvio.
+            avviso = f"Impossibile scrivere {settings.ENV_FILE_PATH}: {e}"
     if cambiati:
         db.commit()
         apply_overrides({k: cambiamenti[k] for k in cambiati})
-    return {"ok": True, "cambiati": cambiati, "riavvio_necessario": riavvio}
+    res = {"ok": True, "cambiati": cambiati, "riavvio_necessario": riavvio}
+    if avviso:
+        res["avviso"] = avviso
+    return res
 
 
 def carica_da_db(db) -> None:
-    """Carica le impostazioni salvate nel DB e le applica live al settings object (chiamato all'avvio)."""
-    overrides = {r.chiave: r.valore for r in db.query(models.ImpostazioneConfig).all()}
+    """Carica le impostazioni salvate nel DB e le applica live al settings object
+    (chiamato all'avvio). Le chiavi _ENV_PERSIST sono ignorate: la loro sorgente è
+    il file .env (letto da Settings all'avvio), non il DB."""
+    overrides = {r.chiave: r.valore for r in db.query(models.ImpostazioneConfig).all()
+                 if r.chiave not in _ENV_PERSIST}
     if overrides:
         apply_overrides(overrides)

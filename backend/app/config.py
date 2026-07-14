@@ -23,6 +23,8 @@ class Settings:
     AI_MODEL_DRAFT: str = os.getenv("AI_MODEL_DRAFT", "")
     AI_TIMEOUT: float = float(os.getenv("AI_TIMEOUT", "180"))
     AI_TLS_VERIFY: bool = os.getenv("AI_TLS_VERIFY", "true").lower() == "true"
+    # Percorso del file .env scrivibile dall'interfaccia (bind-mount nel container).
+    ENV_FILE_PATH: str = os.getenv("ENV_FILE_PATH", "/app/.env")
     # VRAM della GPU del server AI (GB), riferimento per il monitor (RTX 2080 = 8).
     AI_VRAM_GB: float = float(os.getenv("AI_VRAM_GB", "8"))
     # URL dell'exporter nvidia-smi sul server AI (via reverse proxy, es.
