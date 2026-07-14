@@ -21,6 +21,7 @@ import Utenti from "./views/Utenti.jsx";
 import Regolamenti from "./views/Regolamenti.jsx";
 import Assistente from "./views/Assistente.jsx";
 import MonitorAI from "./views/MonitorAI.jsx";
+import SportelloSUE from "./views/SportelloSUE.jsx";
 import Calibrazione from "./views/Calibrazione.jsx";
 import Uffici from "./views/Uffici.jsx";
 
@@ -64,6 +65,7 @@ const VIEW_PERM = {
   inbox:        ["classifica", "prendiCarico", "assegna", "supervisione"],
   scadenziario: ["prendiCarico", "lavora", "assegna", "supervisione"],
   atti:         ["bozze", "supervisione"],
+  sue:          ["classifica", "lavora", "bozze", "supervisione"],
   inventario:   ["lavora", "bozze", "supervisione"],
   uffici:       ["supervisione"],
   regolamenti:  ["supervisione"],
@@ -241,6 +243,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     if (view === "utenti") return <Utenti {...viewProps} />;
     if (view === "regolamenti") return <Regolamenti {...viewProps} />;
     if (view === "monitorai") return <MonitorAI {...viewProps} />;
+    if (view === "sue") return <SportelloSUE {...viewProps} />;
     if (view === "calibrazione") return <Calibrazione {...viewProps} />;
     if (view === "uffici") return <Uffici {...viewProps} />;
     return <Stub title="Modulo" icon="grid" nav={nav} />;
@@ -253,6 +256,7 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
     { k: "inbox",        lbl: "Comunicazioni",         ico: "mail",     badge: counts.daLavorare },
     { k: "scadenziario", lbl: "Pratiche",              ico: "folder",   badge: counts.inRitardo, alert: true },
     { k: "atti",         lbl: "Atti & bozze",          ico: "fileText", badge: counts.daFirmare },
+    { k: "sue",          lbl: "Sportello Edilizia (SUE)", ico: "building" },
     { g: "Patrimonio" },
     { k: "inventario",   lbl: "Inventario beni",       ico: "box" },
     { g: "Sistema" },

@@ -186,6 +186,12 @@ export const api = {
   alboStato: (me) => req("GET", "/api/albo", null, me),
   alboSync: (me) => req("POST", "/api/albo/sync", null, me),
 
+  // Sportello Unico Edilizia (SUE) — prototipo FO+BO
+  sueProcedimenti: (me) => req("GET", "/api/sue/procedimenti", null, me),
+  sueCreaIstanza: (payload, me) => req("POST", "/api/sue/istanze", payload, me),
+  sueIstanze: (me) => req("GET", "/api/sue/istanze", null, me),
+  sueDettaglio: (cui, me) => req("GET", `/api/sue/istanze/${encodeURIComponent(cui)}`, null, me),
+
   // assistente chat globale (RAG)
   assistente: (domanda, storia, me) => req("POST", "/api/assistente", { domanda, storia }, me),
 

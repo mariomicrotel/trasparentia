@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .config import settings
-from . import models, storage, parsing, ingest, search, auth as auth_module, normativa as normativa_module, albo_scraper
+from . import models, storage, parsing, ingest, search, auth as auth_module, normativa as normativa_module, albo_scraper, sue as sue_module
 from . import diagnostica, backup as backup_module, mailer, configurazione_cfg, importazione as imp_module, integrazione as integ_module, utenti as utenti_module
 from . import reference as R
 from .reference import day_from
@@ -52,6 +52,14 @@ def require_perm(me: str, perm: str):
         raise HTTPException(403, "Ruolo non valido")
     if not R.PERM[me].get(perm):
         raise HTTPException(403, f"Azione '{perm}' non consentita al ruolo {R.USERS[me]['ruolo']}")
+
+
+def require_any_perm(me: str, perms: list[str]):
+    """Consente l'accesso se il ruolo ha ALMENO UNO dei permessi indicati."""
+    if me not in R.PERM:
+        raise HTTPException(403, "Ruolo non valido")
+    if not any(R.PERM[me].get(p) for p in perms):
+        raise HTTPException(403, f"Accesso non consentito al ruolo {R.USERS[me]['ruolo']}")
 
 
 def auth_user(x_role: str | None = Header(None), authorization: str | None = Header(None)) -> str:
@@ -1152,6 +1160,89 @@ def albo_sync(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     """Sincronizzazione manuale immediata (oltre a quella periodica in background)."""
     require_perm(me, "supervisione")
     return albo_scraper.sync(db)
+
+
+# ---------- Sportello Unico Edilizia (SUE) — prototipo FO+BO integrati ----------
+@router.get("/sue/procedimenti")
+def sue_procedimenti(me: str = Depends(auth_user)):
+    """Catalogo dei procedimenti SUE (Front-office). Mock del Catalogo SSU."""
+    return {"context": "SUE", "procedimenti": sue_module.catalogo()}
+
+
+@router.post("/sue/istanze")
+def sue_crea_istanza(payload: dict = Body(...), me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Front-office: presentazione di un'istanza SUE. Valida il modulo, genera il
+    CUI, crea l'istanza e la aggancia a una Pratica per l'istruttoria di Back-office."""
+    procId = (payload.get("procedimento") or "").strip()
+    proc = sue_module.PROCEDIMENTI.get(procId)
+    if not proc:
+        raise HTTPException(400, "Procedimento SUE non riconosciuto")
+    presentatore = payload.get("presentatore") or {}
+    dati = payload.get("dati") or {}
+    allegati = payload.get("allegati") or []
+
+    # Controllo formale automatico (precondizione all'invio).
+    mancanti = sue_module.valida_modulo(procId, dati)
+    if mancanti:
+        raise HTTPException(422, "Campi obbligatori mancanti: " + ", ".join(mancanti))
+
+    cui = sue_module.genera_cui(db, proc["sub_context"])
+    ufficio = proc["ufficio"]
+    oggetto = f"{proc['nome']} — {dati.get('immobile_indirizzo', '')}".strip(" —")
+
+    # Protocollo (interno o sistema esterno) + numero pratica.
+    prot_est = integ_module.registra_protocollo(
+        oggetto=oggetto, mittente=presentatore.get("nome", ""), ufficio=ufficio,
+        categoria="Pratica ufficio tecnico")
+    protocollo = prot_est["numero"] if prot_est.get("ok") and prot_est.get("numero") else next_prot(db)
+    prefix = R.UFF_PREFIX.get(ufficio, "UT") + "/2026/"
+    pid = prefix + next_prat_num(db, prefix)
+    scadenza = R.day_from(proc["termineGiorni"]) if proc["termineGiorni"] else None
+
+    cron = [
+        newlog("sportello", "protocollo", f"Istanza SUE presentata online — CUI {cui}", dettaglio=protocollo),
+        newlog("sportello", "classificazione",
+               f"Procedimento SUE: «{proc['nome']}» ({proc['regime']}, {proc['sub_context']})"),
+        newlog("sportello", "assegnazione", f"Assegnata a {ufficio}", statoNew="assegnata"),
+    ]
+    prat = models.Pratica(
+        id=pid, fascicolo=pid, protocollo=protocollo, oggetto=oggetto, categoria="pratica_tecnica",
+        tipoProcedimento=proc["nome"], richiedente=presentatore.get("nome", ""),
+        ufficio=ufficio, responsabile=None, stato="assegnata", priorita="media",
+        apertura=_now_iso(), scadenza=scadenza, comId=None, cronologia=cron, bozze=[],
+    )
+    db.add(prat)
+
+    ist = sue_module.crea_istanza(db, procId, presentatore, dati, allegati, cui, pid, protocollo)
+    db.commit()
+    db.refresh(ist)
+
+    # Indicizzazione per ricerca/assistente (istanza + modulo).
+    try:
+        testo = " ".join([oggetto, proc["regime"], proc["norma"],
+                          " ".join(f"{k}: {v}" for k, v in (dati or {}).items())])
+        search.index_one(db, "istanza_sue", cui, oggetto, testo)
+    except Exception:
+        pass
+
+    return {"ok": True, "cui": cui, "praticaId": pid, "protocollo": protocollo,
+            "istanza": ist.dict()}
+
+
+@router.get("/sue/istanze")
+def sue_lista(me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    """Back-office: elenco delle istanze SUE presentate."""
+    require_any_perm(me, ["classifica", "lavora", "bozze", "supervisione"])
+    return {"istanze": sue_module.lista(db)}
+
+
+@router.get("/sue/istanze/{cui}")
+def sue_dettaglio(cui: str, me: str = Depends(auth_user), db: Session = Depends(get_db)):
+    require_any_perm(me, ["classifica", "lavora", "bozze", "supervisione"])
+    d = sue_module.dettaglio(db, cui)
+    if not d:
+        raise HTTPException(404, "Istanza SUE non trovata")
+    return d
 
 
 # ---------- assistente chat globale (RAG su piattaforma + norme + dati) ----------

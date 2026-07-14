@@ -108,6 +108,33 @@ class Indice(Base):
         return {"id": self.id, "refTipo": self.refTipo, "refId": self.refId, "titolo": self.titolo}
 
 
+class IstanzaSUE(Base):
+    """Istanza di un procedimento SUE (Sportello Unico Edilizia) presentata dal
+    Front-office. Il CUI (codice unico istanza) è la chiave. Ogni istanza è
+    agganciata (praticaId) a una Pratica interna, che ne guida l'istruttoria di
+    Back-office con il workflow, le scadenze e gli atti esistenti."""
+    __tablename__ = "istanze_sue"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # = cui
+    cui: Mapped[str] = mapped_column(String)
+    context: Mapped[str] = mapped_column(String, default="SUE")
+    subContext: Mapped[str] = mapped_column(String, default="SUE Residenziale")
+    procedimentoId: Mapped[str] = mapped_column(String)
+    procedimento: Mapped[str] = mapped_column(Text)
+    regime: Mapped[str] = mapped_column(String, default="")
+    presentatoreNome: Mapped[str] = mapped_column(String, default="")
+    presentatoreCF: Mapped[str] = mapped_column(String, default="")
+    presentatoreEmail: Mapped[str] = mapped_column(String, default="")
+    datiModulo: Mapped[dict] = mapped_column(JSON, default=dict)
+    allegati: Mapped[list] = mapped_column(JSON, default=list)
+    stato: Mapped[str] = mapped_column(String, default="presentata")
+    praticaId: Mapped[str | None] = mapped_column(String, nullable=True)
+    protocollo: Mapped[str | None] = mapped_column(String, nullable=True)
+    creato: Mapped[str] = mapped_column(String)
+
+    def dict(self):
+        return _to_dict(self)
+
+
 class AttoAlbo(Base):
     """Pubblicazione recuperata via scraping dall'Albo Pretorio / sezione
     pubblicazioni del sito istituzionale. NON è una fonte normativa (non entra
