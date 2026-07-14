@@ -277,7 +277,24 @@ export default function App({ kcEnabled = false, kcUsername = null, kcLogout = n
         <span className="slimbar__chip">
           {kcEnabled ? "AUTENTICAZIONE KEYCLOAK" : authMode === "native" ? "ACCESSO LOCALE" : "AMBIENTE DIMOSTRATIVO"}
         </span>
-        <span className="slimbar__sep" /><a href="#">Assistenza</a><a href="#">Manuale</a>
+        {(() => {
+          const L = ENTE.link || {};
+          const voci = [
+            ["Albo Pretorio", L.albo],
+            ["Amministrazione Trasparente", L.ammTrasparente],
+            ["Sito istituzionale", L.sito],
+            ["URP", L.urp],
+          ].filter(([, u]) => u && u.trim());
+          if (!voci.length) return null;
+          return (
+            <>
+              <span className="slimbar__sep" />
+              {voci.map(([lbl, url]) => (
+                <a key={lbl} href={url} target="_blank" rel="noopener noreferrer">{lbl}</a>
+              ))}
+            </>
+          );
+        })()}
       </div>
 
       <div className="topbar">

@@ -257,6 +257,12 @@ def meta_dict() -> dict:
             "cap": settings.ENTE_CAP,
             "abitanti": settings.ENTE_ABITANTI,
             "pec": settings.ENTE_PEC,
+            "link": {
+                "albo": settings.LINK_ALBO_PRETORIO,
+                "ammTrasparente": settings.LINK_AMM_TRASPARENTE,
+                "sito": settings.LINK_SITO_ISTITUZIONALE,
+                "urp": settings.LINK_URP,
+            },
         },
         "tema": {"blu": settings.TEMA_BLU},
         "users": USERS, "perm": PERM, "cat": CAT, "stati": STATI,

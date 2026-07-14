@@ -56,6 +56,13 @@ class Settings:
     ENTE_PEC: str = os.getenv("ENTE_PEC", "protocollo@pec.comune.roccadaspide.sa.it")
     TEMA_BLU: str = os.getenv("TEMA_BLU", "#0066cc")
 
+    # Link istituzionali (Amministrazione Trasparente) — mostrati nella barra
+    # superiore. Configurabili da Configurazione → Look & Feel.
+    LINK_ALBO_PRETORIO: str = os.getenv("LINK_ALBO_PRETORIO", "")
+    LINK_AMM_TRASPARENTE: str = os.getenv("LINK_AMM_TRASPARENTE", "")
+    LINK_SITO_ISTITUZIONALE: str = os.getenv("LINK_SITO_ISTITUZIONALE", "")
+    LINK_URP: str = os.getenv("LINK_URP", "")
+
     # Autenticazione Keycloak (Fase 7). Default: disabilitata (usa native auth o X-Role per demo).
     KC_AUTH_ENABLED: bool = os.getenv("KC_AUTH_ENABLED", "false").lower() == "true"
     KC_INTERNAL_URL: str = os.getenv("KC_INTERNAL_URL", "http://keycloak:8080")

@@ -38,6 +38,11 @@ SCHEMA: dict[str, tuple] = {
     "ENTE_ABITANTI":           ("lookfeel", "Numero di abitanti",                   "number",   False),
     "ENTE_PEC":                ("lookfeel", "PEC istituzionale dell'ente",          "text",     False),
     "TEMA_BLU":                ("lookfeel", "Colore primario (esadecimale #rrggbb)", "text",    False),
+
+    "LINK_ALBO_PRETORIO":      ("lookfeel", "Albo Pretorio online (URL)",           "url",      False),
+    "LINK_AMM_TRASPARENTE":    ("lookfeel", "Amministrazione Trasparente (URL)",    "url",      False),
+    "LINK_SITO_ISTITUZIONALE": ("lookfeel", "Sito istituzionale (URL)",             "url",      False),
+    "LINK_URP":                ("lookfeel", "URP / Contatti (URL)",                 "url",      False),
 }
 
 _SENSITIVE = {"AI_API_KEY", "PEC_PASSWORD", "SMTP_PASSWORD"}
