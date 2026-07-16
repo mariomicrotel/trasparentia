@@ -43,6 +43,12 @@ _DOC_BASE = [
     {"key": "relazione_asseverazione", "label": "Relazione tecnica di asseverazione", "obbligatorio": True},
 ]
 
+# Documento richiesto SOLO quando la domanda è presentata da un tecnico delegato:
+# la procura/delega con cui il titolare incarica il tecnico a presentare l'istanza.
+DOC_DELEGA = {"key": "atto_delega",
+              "label": "Atto di delega / procura speciale al tecnico incaricato",
+              "obbligatorio": True}
+
 # Catalogo procedimenti SUE (sub_context Residenziale/Produttivo, regime, termine,
 # norma di riferimento, ufficio competente, campi del modulo digitale).
 PROCEDIMENTI: dict[str, dict] = {
@@ -178,27 +184,43 @@ def valida_modulo(procedimento_id: str, dati: dict) -> list[str]:
     return mancanti
 
 
-def valida_documenti(procedimento_id: str, allegati: list[dict]) -> list[str]:
-    """Verifica che tutti i documenti OBBLIGATORI del procedimento siano allegati.
-    `allegati` = [{tipoDoc, nome, ...}]. Ritorna le etichette dei documenti mancanti."""
+def documenti_richiesti(procedimento_id: str, ruolo: str = "in_proprio") -> list[dict]:
+    """Elenco dei documenti richiesti per il procedimento, tenendo conto del ruolo
+    del presentatore: se è un tecnico delegato si aggiunge l'atto di delega."""
     proc = PROCEDIMENTI.get(procedimento_id)
     if not proc:
         return []
+    docs = list(proc.get("documenti", []))
+    if ruolo == "tecnico_delegato":
+        docs = docs + [DOC_DELEGA]
+    return docs
+
+
+def valida_documenti(procedimento_id: str, allegati: list[dict], ruolo: str = "in_proprio") -> list[str]:
+    """Verifica che tutti i documenti OBBLIGATORI del procedimento siano allegati.
+    `allegati` = [{tipoDoc, nome, ...}]. Se il presentatore è un tecnico delegato,
+    include anche l'atto di delega. Ritorna le etichette dei documenti mancanti."""
     presenti = {a.get("tipoDoc") for a in (allegati or []) if a.get("tipoDoc")}
-    return [d["label"] for d in proc.get("documenti", [])
+    return [d["label"] for d in documenti_richiesti(procedimento_id, ruolo)
             if d["obbligatorio"] and d["key"] not in presenti]
 
 
 def crea_istanza(db, procedimento_id: str, presentatore: dict, dati: dict,
-                 allegati: list[dict], cui: str, pratica_id: str, protocollo: str) -> models.IstanzaSUE:
+                 allegati: list[dict], cui: str, pratica_id: str, protocollo: str,
+                 ruolo: str = "in_proprio", delegante: dict | None = None) -> models.IstanzaSUE:
     proc = PROCEDIMENTI[procedimento_id]
+    delegante = delegante or {}
     ist = models.IstanzaSUE(
         id=cui, cui=cui, context=CONTEXT, subContext=proc["sub_context"],
         procedimentoId=procedimento_id, procedimento=proc["nome"], regime=proc["regime"],
+        ruoloPresentatore=ruolo,
         presentatoreNome=(presentatore or {}).get("nome", ""),
         presentatoreCognome=(presentatore or {}).get("cognome", ""),
         presentatoreCF=(presentatore or {}).get("cf", ""),
         presentatoreEmail=(presentatore or {}).get("email", ""),
+        deleganteNome=delegante.get("nome", ""),
+        deleganteCognome=delegante.get("cognome", ""),
+        deleganteCF=delegante.get("cf", ""),
         datiModulo=dati or {}, allegati=allegati or [],
         stato="presentata", praticaId=pratica_id, protocollo=protocollo,
         creato=date.today().isoformat(),

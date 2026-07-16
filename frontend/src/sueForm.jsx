@@ -78,16 +78,30 @@ function RigaDocumento({ doc, allegato, onFile, onErrore }) {
 
 export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
   const [cat, setCat] = useState(null);
+  const [docDelega, setDocDelega] = useState(null);
   const [procId, setProcId] = useState("");
   const [email, setEmail] = useState(identita?.email || "");
+  const [ruolo, setRuolo] = useState("in_proprio");        // in_proprio | tecnico_delegato
+  const [delegante, setDelegante] = useState({ nome: "", cognome: "", cf: "" });
   const [dati, setDati] = useState({});
   const [allegati, setAllegati] = useState({});   // tipoDoc → {tipoDoc,label,nome,size}
   const [busy, setBusy] = useState(false);
   const [esito, setEsito] = useState(null);
 
-  useEffect(() => { api.sueProcedimenti().then(r => setCat(r.procedimenti)).catch(() => setCat([])); }, []);
+  useEffect(() => {
+    api.sueProcedimenti()
+      .then(r => { setCat(r.procedimenti); setDocDelega(r.docDelega || null); })
+      .catch(() => setCat([]));
+  }, []);
 
   const proc = (cat || []).find(p => p.id === procId);
+  const delega = ruolo === "tecnico_delegato";
+
+  // Documenti richiesti: quelli del procedimento + l'atto di delega se tecnico delegato.
+  const documenti = [
+    ...(proc?.documenti || []),
+    ...(delega && docDelega ? [docDelega] : []),
+  ];
 
   function scegli(id) { setProcId(id); setDati({}); setAllegati({}); setEsito(null); }
 
@@ -95,7 +109,9 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
     const presentatore = { nome: identita.nome, cognome: identita.cognome, cf: identita.cf, email };
     setBusy(true);
     try {
-      const r = await api.sueCreaIstanza({ procedimento: procId, presentatore, dati, allegati: Object.values(allegati) });
+      const payload = { procedimento: procId, presentatore, dati, allegati: Object.values(allegati), ruolo };
+      if (delega) payload.delegante = delegante;
+      const r = await api.sueCreaIstanza(payload);
       setEsito(r);
       toast(`Istanza presentata — CUI ${r.cui}`, "success");
       onFatto && onFatto();
@@ -103,8 +119,10 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
     finally { setBusy(false); }
   }
 
-  // Documenti obbligatori mancanti (per abilitare/spiegare il pulsante Invia).
-  const docObblMancanti = (proc?.documenti || []).filter(d => d.obbligatorio && !allegati[d.key]);
+  // Documenti obbligatori mancanti (per spiegare il pulsante Invia).
+  const docObblMancanti = documenti.filter(d => d.obbligatorio && !allegati[d.key]);
+  // Dati del delegante mancanti (blocca l'invio se tecnico delegato).
+  const deleganteIncompleto = delega && !(delegante.nome.trim() && delegante.cognome.trim() && delegante.cf.trim());
 
   if (esito) {
     return (
@@ -129,16 +147,49 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
     <div className="card">
       <div className="card__body">
         {identita && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 18,
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 16,
                        borderRadius: 8, background: "var(--verde-bg, #f0faf4)", border: "1px solid var(--verde, #1a7a45)" }}>
             <Icon name="checkCircle" size={16} stroke={2} style={{ color: "var(--verde)", flexShrink: 0 }} />
             <div style={{ fontSize: 13, flex: 1 }}>
               Identità verificata: <b>{identita.nome} {identita.cognome}</b>
               <span style={{ color: "var(--text-muted)" }}> · CF {identita.cf}</span>
+              {delega && <span style={{ color: "var(--text-muted)" }}> · presenta come tecnico incaricato</span>}
             </div>
             {onCambiaIdentita && (
               <button className="btn btn--subtle btn--sm" onClick={onCambiaIdentita}>Esci</button>
             )}
+          </div>
+        )}
+
+        {/* Ruolo di chi presenta: diretto interessato oppure tecnico delegato. */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Presento la domanda</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            <button onClick={() => setRuolo("in_proprio")}
+              className={"btn btn--sm " + (!delega ? "btn--primary" : "btn--subtle")}>
+              <Icon name="user" size={13} stroke={2} />In proprio (diretto interessato)
+            </button>
+            <button onClick={() => setRuolo("tecnico_delegato")}
+              className={"btn btn--sm " + (delega ? "btn--primary" : "btn--subtle")}>
+              <Icon name="signature" size={13} stroke={2} />Come tecnico incaricato / delegato
+            </button>
+          </div>
+        </div>
+
+        {/* Dati del titolare (delegante): solo quando presenta un tecnico delegato. */}
+        {delega && (
+          <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 4 }}>
+              Titolare / richiedente delegante
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 10px" }}>
+              Chi conferisce l'incarico. L'atto di delega va allegato tra i documenti.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <CampoModulo campo={{ label: "Nome", tipo: "text", required: true }} valore={delegante.nome} onChange={v => setDelegante(d => ({ ...d, nome: v }))} />
+              <CampoModulo campo={{ label: "Cognome", tipo: "text", required: true }} valore={delegante.cognome} onChange={v => setDelegante(d => ({ ...d, cognome: v }))} />
+              <CampoModulo campo={{ label: "Codice fiscale", tipo: "text", required: true }} valore={delegante.cf} onChange={v => setDelegante(d => ({ ...d, cf: v.toUpperCase() }))} />
+            </div>
           </div>
         )}
 
@@ -182,14 +233,14 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
               </div>
             ))}
 
-            {/* Documenti da allegare. */}
-            {(proc.documenti || []).length > 0 && (
+            {/* Documenti da allegare (+ atto di delega se tecnico delegato). */}
+            {documenti.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "10px 0 8px" }}>
                   Documenti da allegare
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {proc.documenti.map(doc => (
+                  {documenti.map(doc => (
                     <RigaDocumento key={doc.key} doc={doc} allegato={allegati[doc.key]}
                       onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))}
                       onErrore={(m) => toast(m, "")} />
@@ -199,9 +250,15 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
             )}
 
             <div style={{ marginTop: 18, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn--primary" disabled={busy || !identita} onClick={invia}>
+              <button className="btn btn--primary" disabled={busy || !identita || deleganteIncompleto} onClick={invia}>
                 <Icon name="send" size={15} stroke={2} />{busy ? "Invio…" : "Invia istanza"}
               </button>
+              {deleganteIncompleto && (
+                <span style={{ fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 }}>
+                  <Icon name="alertCircle" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                  Completa i dati del titolare delegante
+                </span>
+              )}
               {docObblMancanti.length > 0 && (
                 <span style={{ fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 }}>
                   <Icon name="alertCircle" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />

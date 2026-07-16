@@ -1170,8 +1170,11 @@ def albo_sync(me: str = Depends(auth_user), db: Session = Depends(get_db)):
 # Gli endpoint di Back-office restano protetti (require_any_perm) più sotto.
 @router.get("/sue/procedimenti")
 def sue_procedimenti():
-    """Catalogo dei procedimenti SUE (Front-office). Mock del Catalogo SSU."""
-    return {"context": "SUE", "procedimenti": sue_module.catalogo()}
+    """Catalogo dei procedimenti SUE (Front-office). Mock del Catalogo SSU.
+    `docDelega` è il documento aggiuntivo richiesto quando la domanda è
+    presentata da un tecnico incaricato delegato."""
+    return {"context": "SUE", "procedimenti": sue_module.catalogo(),
+            "docDelega": sue_module.DOC_DELEGA}
 
 
 @router.post("/sue/allegati")
@@ -1223,13 +1226,36 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
     presentatore = payload.get("presentatore") or {}
     dati = payload.get("dati") or {}
     allegati = payload.get("allegati") or []
-    nome_completo = " ".join(filter(None, [presentatore.get("nome", ""), presentatore.get("cognome", "")])).strip()
+    # Ruolo del presentatore: "in_proprio" (è il titolare) o "tecnico_delegato"
+    # (presenta per conto del titolare, con procura). In quest'ultimo caso i dati
+    # del titolare arrivano in `delegante` e l'atto di delega è obbligatorio.
+    ruolo = (payload.get("ruolo") or "in_proprio").strip()
+    delegante = payload.get("delegante") or {}
+    if ruolo not in ("in_proprio", "tecnico_delegato"):
+        ruolo = "in_proprio"
+
+    def _nome(p):
+        return " ".join(filter(None, [p.get("nome", ""), p.get("cognome", "")])).strip()
+
+    nome_presentatore = _nome(presentatore)
+    # Il richiedente sostanziale della pratica è il titolare: se delegato è il
+    # delegante, altrimenti coincide con il presentatore.
+    titolare = delegante if ruolo == "tecnico_delegato" else presentatore
+    nome_titolare = _nome(titolare)
 
     # Controllo formale automatico (precondizione all'invio): dati + documenti.
     mancanti = sue_module.valida_modulo(procId, dati)
     if mancanti:
         raise HTTPException(422, "Campi obbligatori mancanti: " + ", ".join(mancanti))
-    doc_mancanti = sue_module.valida_documenti(procId, allegati)
+    if ruolo == "tecnico_delegato":
+        del_mancanti = [etichetta for chiave, etichetta in
+                        [("nome", "Nome del titolare delegante"),
+                         ("cognome", "Cognome del titolare delegante"),
+                         ("cf", "Codice fiscale del titolare delegante")]
+                        if not str(delegante.get(chiave, "")).strip()]
+        if del_mancanti:
+            raise HTTPException(422, "Dati del delegante mancanti: " + ", ".join(del_mancanti))
+    doc_mancanti = sue_module.valida_documenti(procId, allegati, ruolo)
     if doc_mancanti:
         raise HTTPException(422, "Documenti obbligatori mancanti: " + ", ".join(doc_mancanti))
 
@@ -1239,28 +1265,31 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
 
     # Protocollo (interno o sistema esterno) + numero pratica.
     prot_est = integ_module.registra_protocollo(
-        oggetto=oggetto, mittente=nome_completo, ufficio=ufficio,
+        oggetto=oggetto, mittente=nome_titolare, ufficio=ufficio,
         categoria="Pratica ufficio tecnico")
     protocollo = prot_est["numero"] if prot_est.get("ok") and prot_est.get("numero") else next_prot(db)
     prefix = R.UFF_PREFIX.get(ufficio, "UT") + "/2026/"
     pid = prefix + next_prat_num(db, prefix)
     scadenza = R.day_from(proc["termineGiorni"]) if proc["termineGiorni"] else None
 
+    presentato_da = (f"presentata dal tecnico incaricato {nome_presentatore} per conto di {nome_titolare}"
+                     if ruolo == "tecnico_delegato" else f"presentata in proprio da {nome_presentatore}")
     cron = [
         newlog("sportello", "protocollo", f"Istanza SUE presentata online — CUI {cui}", dettaglio=protocollo),
         newlog("sportello", "classificazione",
-               f"Procedimento SUE: «{proc['nome']}» ({proc['regime']}, {proc['sub_context']})"),
+               f"Procedimento SUE: «{proc['nome']}» ({proc['regime']}, {proc['sub_context']}) — {presentato_da}"),
         newlog("sportello", "assegnazione", f"Assegnata a {ufficio}", statoNew="assegnata"),
     ]
     prat = models.Pratica(
         id=pid, fascicolo=pid, protocollo=protocollo, oggetto=oggetto, categoria="pratica_tecnica",
-        tipoProcedimento=proc["nome"], richiedente=nome_completo,
+        tipoProcedimento=proc["nome"], richiedente=nome_titolare,
         ufficio=ufficio, responsabile=None, stato="assegnata", priorita="media",
         apertura=_now_iso(), scadenza=scadenza, comId=None, cronologia=cron, bozze=[],
     )
     db.add(prat)
 
-    ist = sue_module.crea_istanza(db, procId, presentatore, dati, allegati, cui, pid, protocollo)
+    ist = sue_module.crea_istanza(db, procId, presentatore, dati, allegati, cui, pid, protocollo,
+                                  ruolo=ruolo, delegante=delegante)
     db.commit()
     db.refresh(ist)
 

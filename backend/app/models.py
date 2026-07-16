@@ -121,10 +121,20 @@ class IstanzaSUE(Base):
     procedimentoId: Mapped[str] = mapped_column(String)
     procedimento: Mapped[str] = mapped_column(Text)
     regime: Mapped[str] = mapped_column(String, default="")
+    # Chi presenta materialmente l'istanza (identità SPID/CIE/CNS):
+    #  - "in_proprio": è il diretto interessato (titolare/richiedente)
+    #  - "tecnico_delegato": è il tecnico incaricato che presenta per conto del
+    #    titolare, con procura/delega. In tal caso i dati del titolare sono nei
+    #    campi delegante* e l'atto di delega è un allegato obbligatorio.
+    ruoloPresentatore: Mapped[str] = mapped_column(String, default="in_proprio")
     presentatoreNome: Mapped[str] = mapped_column(String, default="")
     presentatoreCognome: Mapped[str] = mapped_column(String, default="")
     presentatoreCF: Mapped[str] = mapped_column(String, default="")
     presentatoreEmail: Mapped[str] = mapped_column(String, default="")
+    # Delegante (titolare/richiedente) quando il presentatore è un tecnico delegato.
+    deleganteNome: Mapped[str] = mapped_column(String, default="")
+    deleganteCognome: Mapped[str] = mapped_column(String, default="")
+    deleganteCF: Mapped[str] = mapped_column(String, default="")
     datiModulo: Mapped[dict] = mapped_column(JSON, default=dict)
     allegati: Mapped[list] = mapped_column(JSON, default=list)
     stato: Mapped[str] = mapped_column(String, default="presentata")

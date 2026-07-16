@@ -29,8 +29,25 @@ function Istanze({ me, nav, tick }) {
                 <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i.procedimento}</div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                   CUI <span className="mono">{i.cui}</span> · {i.regime} · {i.subContext} · presentata {fmtDate(i.creato)}
-                  {i.presentatoreNome || i.presentatoreCognome ? ` · ${[i.presentatoreNome, i.presentatoreCognome].filter(Boolean).join(" ")}` : ""}
                 </div>
+                {(() => {
+                  const presentatore = [i.presentatoreNome, i.presentatoreCognome].filter(Boolean).join(" ");
+                  const titolare = [i.deleganteNome, i.deleganteCognome].filter(Boolean).join(" ");
+                  if (i.ruoloPresentatore === "tecnico_delegato") {
+                    return (
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                        <Icon name="signature" size={11} stroke={2} style={{ verticalAlign: "middle", marginRight: 3 }} />
+                        Titolare <b>{titolare || "—"}</b> · presentata dal tecnico <b>{presentatore || "—"}</b>
+                      </div>
+                    );
+                  }
+                  return presentatore ? (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                      <Icon name="user" size={11} stroke={2} style={{ verticalAlign: "middle", marginRight: 3 }} />
+                      {presentatore} <span style={{ opacity: .7 }}>(in proprio)</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
               {i.praticaId && (
                 <button className="btn btn--subtle btn--sm" onClick={() => nav("pratica", { id: i.praticaId })}>
