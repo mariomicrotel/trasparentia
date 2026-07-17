@@ -234,6 +234,19 @@ def lista(db) -> list[dict]:
             .order_by(models.IstanzaSUE.creato.desc()).all()]
 
 
+def lista_per_cf(db, cf: str) -> list[dict]:
+    """«Le mie istanze» (Front-office): le istanze in cui il codice fiscale
+    compare come presentatore o come titolare delegante. Il cittadino/tecnico
+    vede così tutte le pratiche presentate in proprio o per conto di altri."""
+    cf = (cf or "").strip().upper()
+    if not cf:
+        return []
+    rows = (db.query(models.IstanzaSUE)
+            .filter((models.IstanzaSUE.presentatoreCF == cf) | (models.IstanzaSUE.deleganteCF == cf))
+            .order_by(models.IstanzaSUE.creato.desc()).all())
+    return [i.dict() for i in rows]
+
+
 def dettaglio(db, cui: str) -> dict | None:
     i = db.get(models.IstanzaSUE, cui)
     return i.dict() if i else None

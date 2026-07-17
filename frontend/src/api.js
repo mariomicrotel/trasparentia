@@ -197,6 +197,8 @@ export const api = {
     fd.append("tipoDoc", tipoDoc);
     return upload("/api/sue/allegati", fd);
   },
+  // «Le mie istanze» (FO pubblico): pratiche del titolare del codice fiscale.
+  sueMieIstanze: (cf) => req("GET", `/api/sue/mie-istanze?cf=${encodeURIComponent(cf || "")}`),
   // Back-office: richiede login staff (require_any_perm lato backend).
   sueIstanze: (me) => req("GET", "/api/sue/istanze", null, me),
   sueDettaglio: (cui, me) => req("GET", `/api/sue/istanze/${encodeURIComponent(cui)}`, null, me),

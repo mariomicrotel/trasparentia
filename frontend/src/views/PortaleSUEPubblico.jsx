@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Icon } from "../icons.jsx";
-import { Presenta } from "../sueForm.jsx";
+import { Presenta, MieIstanze } from "../sueForm.jsx";
 import MockSpidLogin from "../mockSpid.jsx";
 
 // Portale pubblico dello Sportello Unico per l'Edilizia — Front-office.
@@ -9,12 +9,14 @@ import MockSpidLogin from "../mockSpid.jsx";
 // staff. Bypassa interamente l'autenticazione dell'app (nativa/Keycloak) —
 // vedi il check in App.jsx (e in main.jsx per il caso Keycloak).
 //
-// L'accesso al portale avviene invece tramite SPID/CIE (simulato: vedi
+// L'accesso al portale avviene tramite SPID/CIE/CNS (simulati: vedi
 // mockSpid.jsx). Finché l'identità non è verificata, il modulo di istanza
 // non è raggiungibile.
 
 export default function PortaleSUEPubblico() {
   const [identita, setIdentita] = useState(null);
+  const [vista, setVista] = useState("presenta");   // presenta | mie
+  const [tick, setTick] = useState(0);              // forza il refresh di «Le mie istanze»
   const [toasts, setToasts] = useState([]);
   const toast = (msg, tone = "") => {
     const id = Math.random().toString(36).slice(2);
@@ -39,11 +41,25 @@ export default function PortaleSUEPubblico() {
           </div>
         ) : (
           <>
-            <div className="banner banner--info" style={{ marginBottom: 20, fontSize: 13 }}>
-              <Icon name="info" size={16} stroke={2} />
-              <span>Prototipo dimostrativo: la firma digitale e il Catalogo nazionale degli Sportelli Unici sono simulati.</span>
+            {/* Navigazione: presenta una nuova istanza / consulta le proprie. */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+              <button onClick={() => setVista("presenta")}
+                className={"btn " + (vista === "presenta" ? "btn--primary" : "btn--subtle")}>
+                <Icon name="filePlus" size={15} stroke={2} />Presenta istanza
+              </button>
+              <button onClick={() => { setVista("mie"); setTick(t => t + 1); }}
+                className={"btn " + (vista === "mie" ? "btn--primary" : "btn--subtle")}>
+                <Icon name="folder" size={15} stroke={2} />Le mie istanze
+              </button>
             </div>
-            <Presenta toast={toast} identita={identita} onCambiaIdentita={() => setIdentita(null)} />
+
+            {vista === "presenta" ? (
+              <Presenta toast={toast} identita={identita}
+                onCambiaIdentita={() => setIdentita(null)}
+                onFatto={() => setTick(t => t + 1)} />
+            ) : (
+              <MieIstanze key={tick} identita={identita} toast={toast} />
+            )}
           </>
         )}
       </div>

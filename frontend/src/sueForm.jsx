@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { Icon } from "./icons.jsx";
+import { scaricaRicevuta } from "./sueRicevuta.js";
 
 // Form di presentazione istanza SUE, condiviso tra:
 // - il portale pubblico standalone (PortaleSUEPubblico.jsx, nessun login)
@@ -76,9 +77,48 @@ function RigaDocumento({ doc, allegato, onFile, onErrore }) {
   );
 }
 
+// Passi del wizard di inserimento (cfr. Guida operativa SUE — «Inserimento nuove pratiche»).
+const STEPS = [
+  { key: "procedimento", label: "Procedimento" },
+  { key: "presentata_da", label: "Presentata da" },
+  { key: "dati", label: "Dati dell'istanza" },
+  { key: "allegati", label: "Allegati" },
+  { key: "riepilogo", label: "Riepilogo" },
+];
+
+// Intestazione a step (stepper). Cliccando uno step già raggiunto si torna indietro.
+function Stepper({ step, maxRaggiunto, onVai }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 18 }}>
+      {STEPS.map((s, i) => {
+        const attivo = i === step, fatto = i < step, cliccabile = i <= maxRaggiunto;
+        return (
+          <button key={s.key} onClick={() => cliccabile && onVai(i)} disabled={!cliccabile}
+            style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 20,
+              border: "1px solid " + (attivo ? "var(--blu, #0066cc)" : "var(--border)"),
+              background: attivo ? "var(--blu, #0066cc)" : fatto ? "var(--verde-bg, #f0faf4)" : "var(--surface)",
+              color: attivo ? "#fff" : "var(--text)", fontSize: 12, fontWeight: 600,
+              cursor: cliccabile ? "pointer" : "default", opacity: cliccabile ? 1 : .55,
+            }}>
+            <span style={{
+              width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10.5, fontWeight: 700,
+              background: attivo ? "rgba(255,255,255,.25)" : fatto ? "var(--verde, #1a7a45)" : "var(--surface-2, #eef1f5)",
+              color: attivo ? "#fff" : fatto ? "#fff" : "var(--text-muted)",
+            }}>{fatto ? "✓" : i + 1}</span>
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
   const [cat, setCat] = useState(null);
   const [docDelega, setDocDelega] = useState(null);
+  const [step, setStep] = useState(0);
   const [procId, setProcId] = useState("");
   const [email, setEmail] = useState(identita?.email || "");
   const [ruolo, setRuolo] = useState("in_proprio");        // in_proprio | tecnico_delegato
@@ -103,7 +143,26 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
     ...(delega && docDelega ? [docDelega] : []),
   ];
 
-  function scegli(id) { setProcId(id); setDati({}); setAllegati({}); setEsito(null); }
+  // Controlli per step (abilitano «Prosegui»).
+  const docObblMancanti = documenti.filter(d => d.obbligatorio && !allegati[d.key]);
+  const deleganteIncompleto = delega && !(delegante.nome.trim() && delegante.cognome.trim() && delegante.cf.trim());
+  const emailMancante = !email.trim();
+  const campiMancanti = proc ? proc.campi.filter(c => c.required && !String(dati[c.key] || "").trim()) : [];
+
+  function stepValido(i) {
+    if (i === 0) return !!procId;
+    if (i === 1) return !emailMancante && !deleganteIncompleto;
+    if (i === 2) return campiMancanti.length === 0;
+    if (i === 3) return docObblMancanti.length === 0;
+    return true;
+  }
+  const puoAvanzare = stepValido(step);
+
+  function scegli(id) { setProcId(id); setDati({}); setAllegati({}); }
+  function reset() {
+    setStep(0); setProcId(""); setRuolo("in_proprio"); setDelegante({ nome: "", cognome: "", cf: "" });
+    setDati({}); setAllegati({}); setEsito(null); setEmail(identita?.email || "");
+  }
 
   async function invia() {
     const presentatore = { nome: identita.nome, cognome: identita.cognome, cf: identita.cf, email };
@@ -119,29 +178,34 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
     finally { setBusy(false); }
   }
 
-  // Documenti obbligatori mancanti (per spiegare il pulsante Invia).
-  const docObblMancanti = documenti.filter(d => d.obbligatorio && !allegati[d.key]);
-  // Dati del delegante mancanti (blocca l'invio se tecnico delegato).
-  const deleganteIncompleto = delega && !(delegante.nome.trim() && delegante.cognome.trim() && delegante.cf.trim());
-
+  // ── Esito: istanza inviata, con ricevuta scaricabile (art. 18-bis) ──────────
   if (esito) {
     return (
       <div className="card"><div className="card__body" style={{ textAlign: "center", padding: "32px 24px" }}>
         <Icon name="checkCircle" size={44} stroke={2} style={{ color: "var(--verde)" }} />
-        <h3 style={{ margin: "12px 0 6px" }}>Istanza presentata con successo</h3>
+        <h3 style={{ margin: "12px 0 6px" }}>Istanza trasmessa con successo</h3>
         <p style={{ color: "var(--text-muted)", fontSize: 13.5 }}>
           Codice Unico Istanza (CUI): <b className="mono">{esito.cui}</b><br />
           Protocollo: <b className="mono">{esito.protocollo}</b> · Pratica: <b className="mono">{esito.praticaId}</b>
         </p>
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)", maxWidth: 460, margin: "10px auto 0" }}>
-          L'istanza è stata protocollata e assegnata all'Ufficio Tecnico per l'istruttoria di back-office.
+        <p style={{ fontSize: 12.5, color: "var(--text-muted)", maxWidth: 480, margin: "10px auto 0" }}>
+          L'istanza è stata protocollata e assegnata all'Ufficio Tecnico. Scarica la ricevuta di
+          avvenuta trasmissione (vale come avvio del procedimento, art. 18-bis L. 241/1990). La trovi
+          anche in «Le mie istanze».
         </p>
-        <button className="btn btn--subtle" style={{ marginTop: 16 }} onClick={() => { setEsito(null); setProcId(""); setDati({}); setAllegati({}); }}>
-          <Icon name="plus" size={15} stroke={2} />Presenta un'altra istanza
-        </button>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 18 }}>
+          <button className="btn btn--primary" onClick={() => scaricaRicevuta(esito.istanza || {}, { protocollo: esito.protocollo, praticaId: esito.praticaId })}>
+            <Icon name="download" size={15} stroke={2} />Scarica ricevuta
+          </button>
+          <button className="btn btn--subtle" onClick={reset}>
+            <Icon name="plus" size={15} stroke={2} />Presenta un'altra istanza
+          </button>
+        </div>
       </div></div>
     );
   }
+
+  const stepKey = STEPS[step].key;
 
   return (
     <div className="card">
@@ -161,65 +225,72 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
           </div>
         )}
 
-        {/* Ruolo di chi presenta: diretto interessato oppure tecnico delegato. */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Presento la domanda</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            <button onClick={() => setRuolo("in_proprio")}
-              className={"btn btn--sm " + (!delega ? "btn--primary" : "btn--subtle")}>
-              <Icon name="user" size={13} stroke={2} />In proprio (diretto interessato)
-            </button>
-            <button onClick={() => setRuolo("tecnico_delegato")}
-              className={"btn btn--sm " + (delega ? "btn--primary" : "btn--subtle")}>
-              <Icon name="signature" size={13} stroke={2} />Come tecnico incaricato / delegato
-            </button>
-          </div>
-        </div>
+        <Stepper step={step} maxRaggiunto={step} onVai={setStep} />
 
-        {/* Dati del titolare (delegante): solo quando presenta un tecnico delegato. */}
-        {delega && (
-          <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
-            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 4 }}>
-              Titolare / richiedente delegante
+        {/* ── Step 0: scelta del procedimento ─────────────────────────────── */}
+        {stepKey === "procedimento" && (
+          <div>
+            <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Procedimento edilizio</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              {(cat || []).map(p => (
+                <button key={p.id} onClick={() => scegli(p.id)}
+                  className={"btn btn--sm " + (procId === p.id ? "btn--primary" : "btn--subtle")}
+                  title={`${p.regime} · ${p.norma}`}>
+                  {p.nome}
+                </button>
+              ))}
             </div>
-            <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 10px" }}>
-              Chi conferisce l'incarico. L'atto di delega va allegato tra i documenti.
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <CampoModulo campo={{ label: "Nome", tipo: "text", required: true }} valore={delegante.nome} onChange={v => setDelegante(d => ({ ...d, nome: v }))} />
-              <CampoModulo campo={{ label: "Cognome", tipo: "text", required: true }} valore={delegante.cognome} onChange={v => setDelegante(d => ({ ...d, cognome: v }))} />
-              <CampoModulo campo={{ label: "Codice fiscale", tipo: "text", required: true }} valore={delegante.cf} onChange={v => setDelegante(d => ({ ...d, cf: v.toUpperCase() }))} />
+            {proc && (
+              <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)", fontSize: 12.5, color: "var(--text-muted)" }}>
+                <div><b style={{ color: "var(--text)" }}>{proc.nome}</b></div>
+                Regime: <b>{proc.regime}</b> · {proc.sub_context} · norma: {proc.norma}
+                {proc.termineGiorni > 0 ? ` · termine ${proc.termineGiorni} giorni` : " · efficacia immediata"}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Step 1: presentata da (ruolo + delegante + contatto) ─────────── */}
+        {stepKey === "presentata_da" && (
+          <div>
+            <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Presento la domanda</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              <button onClick={() => setRuolo("in_proprio")}
+                className={"btn btn--sm " + (!delega ? "btn--primary" : "btn--subtle")}>
+                <Icon name="user" size={13} stroke={2} />In proprio (diretto interessato)
+              </button>
+              <button onClick={() => setRuolo("tecnico_delegato")}
+                className={"btn btn--sm " + (delega ? "btn--primary" : "btn--subtle")}>
+                <Icon name="signature" size={13} stroke={2} />Come tecnico incaricato / delegato
+              </button>
+            </div>
+
+            {delega && (
+              <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Titolare / richiedente delegante
+                </div>
+                <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 10px" }}>
+                  Chi conferisce l'incarico. L'atto di delega va allegato nello step «Allegati».
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <CampoModulo campo={{ label: "Nome", tipo: "text", required: true }} valore={delegante.nome} onChange={v => setDelegante(d => ({ ...d, nome: v }))} />
+                  <CampoModulo campo={{ label: "Cognome", tipo: "text", required: true }} valore={delegante.cognome} onChange={v => setDelegante(d => ({ ...d, cognome: v }))} />
+                  <CampoModulo campo={{ label: "Codice fiscale", tipo: "text", required: true }} valore={delegante.cf} onChange={v => setDelegante(d => ({ ...d, cf: v.toUpperCase() }))} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "16px 0 8px" }}>Contatto</div>
+            <div style={{ maxWidth: 340 }}>
+              <CampoModulo campo={{ label: "Email per le comunicazioni", tipo: "text", required: true }} valore={email} onChange={setEmail} />
             </div>
           </div>
         )}
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Procedimento edilizio</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            {(cat || []).map(p => (
-              <button key={p.id} onClick={() => scegli(p.id)}
-                className={"btn btn--sm " + (procId === p.id ? "btn--primary" : "btn--subtle")}
-                title={`${p.regime} · ${p.norma}`}>
-                {p.nome}
-              </button>
-            ))}
-          </div>
-          {proc && (
-            <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
-              Regime: <b>{proc.regime}</b> · {proc.sub_context} · norma: {proc.norma}
-              {proc.termineGiorni > 0 ? ` · termine ${proc.termineGiorni} gg` : " · efficacia immediata"}
-            </div>
-          )}
-        </div>
-
-        {proc && (
-          <>
-            <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "6px 0 8px" }}>Contatto</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16, maxWidth: 320 }}>
-              <CampoModulo campo={{ label: "Email per le comunicazioni", tipo: "text" }} valore={email} onChange={setEmail} />
-            </div>
-
-            {/* Modulo digitale, raggruppato per sezione (modulistica unificata). */}
+        {/* ── Step 2: dati dell'istanza (per sezione) ──────────────────────── */}
+        {stepKey === "dati" && proc && (
+          <div>
             {[...new Set(proc.campi.map(c => c.sezione || "Dati"))].map(sez => (
               <div key={sez} style={{ marginBottom: 6 }}>
                 <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "10px 0 8px" }}>{sez}</div>
@@ -232,47 +303,162 @@ export function Presenta({ toast, onFatto, identita, onCambiaIdentita }) {
                 </div>
               </div>
             ))}
-
-            {/* Documenti da allegare (+ atto di delega se tecnico delegato). */}
-            {documenti.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", margin: "10px 0 8px" }}>
-                  Documenti da allegare
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {documenti.map(doc => (
-                    <RigaDocumento key={doc.key} doc={doc} allegato={allegati[doc.key]}
-                      onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))}
-                      onErrore={(m) => toast(m, "")} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginTop: 18, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn--primary" disabled={busy || !identita || deleganteIncompleto} onClick={invia}>
-                <Icon name="send" size={15} stroke={2} />{busy ? "Invio…" : "Invia istanza"}
-              </button>
-              {deleganteIncompleto && (
-                <span style={{ fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 }}>
-                  <Icon name="alertCircle" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                  Completa i dati del titolare delegante
-                </span>
-              )}
-              {docObblMancanti.length > 0 && (
-                <span style={{ fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 }}>
-                  <Icon name="alertCircle" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                  {docObblMancanti.length} document{docObblMancanti.length === 1 ? "o" : "i"} obbligatori{docObblMancanti.length === 1 ? "o" : ""} da allegare
-                </span>
-              )}
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                <Icon name="info" size={13} stroke={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
-                Prototipo: firma e Catalogo SSU nazionale sono simulati.
-              </span>
-            </div>
-          </>
+          </div>
         )}
+
+        {/* ── Step 3: allegati ─────────────────────────────────────────────── */}
+        {stepKey === "allegati" && (
+          <div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px" }}>
+              I documenti contrassegnati come <b>OBBLIGATORIO</b> sono necessari per proseguire.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {documenti.map(doc => (
+                <RigaDocumento key={doc.key} doc={doc} allegato={allegati[doc.key]}
+                  onFile={(a) => setAllegati(prev => ({ ...prev, [doc.key]: a }))}
+                  onErrore={(m) => toast(m, "")} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 4: riepilogo ────────────────────────────────────────────── */}
+        {stepKey === "riepilogo" && proc && (
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{proc.nome}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+              {proc.regime} · {proc.sub_context} · {proc.norma}
+              {proc.termineGiorni > 0 ? ` · termine ${proc.termineGiorni} gg` : " · efficacia immediata"}
+            </div>
+
+            <div className="mono" style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, margin: "10px 0 6px" }}>Presentata da</div>
+            <div style={{ fontSize: 13 }}>
+              {delega
+                ? <>Titolare <b>{delegante.nome} {delegante.cognome}</b> (CF {delegante.cf}) · presentata dal tecnico <b>{identita.nome} {identita.cognome}</b></>
+                : <><b>{identita.nome} {identita.cognome}</b> (in proprio) · CF {identita.cf}</>}
+              <div style={{ color: "var(--text-muted)" }}>Email: {email || "—"}</div>
+            </div>
+
+            <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, margin: "14px 0 6px" }}>Dati dell'istanza</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+              {proc.campi.filter(c => String(dati[c.key] || "").trim()).map(c => (
+                <div key={c.key} style={{ fontSize: 12.5 }}>
+                  <span style={{ color: "var(--text-muted)" }}>{c.label}:</span> <b>{dati[c.key]}</b>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, margin: "14px 0 6px" }}>Documentazione ({Object.keys(allegati).length})</div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
+              {Object.values(allegati).map(a => (
+                <li key={a.tipoDoc}>{a.label} — <span className="mono" style={{ color: "var(--text-muted)" }}>{a.nome}</span></li>
+              ))}
+              {!Object.keys(allegati).length && <li style={{ color: "var(--text-muted)" }}>Nessun allegato</li>}
+            </ul>
+
+            <div className="banner banner--info" style={{ marginTop: 16, fontSize: 12.5 }}>
+              <Icon name="info" size={15} stroke={2} />
+              <span>Alla conclusione l'istanza viene protocollata e ricevi la ricevuta di trasmissione. Prototipo: firma digitale e Catalogo SSU nazionale sono simulati.</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Navigazione wizard ───────────────────────────────────────────── */}
+        <div style={{ marginTop: 20, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn--subtle" disabled={step === 0 || busy} onClick={() => setStep(s => Math.max(0, s - 1))}>
+            <Icon name="arrowLeft" size={15} stroke={2} />Indietro
+          </button>
+          {step < STEPS.length - 1 ? (
+            <button className="btn btn--primary" disabled={!puoAvanzare} onClick={() => setStep(s => s + 1)}>
+              Prosegui<Icon name="arrowRight" size={15} stroke={2} />
+            </button>
+          ) : (
+            <button className="btn btn--primary" disabled={busy || !identita} onClick={invia}>
+              <Icon name="send" size={15} stroke={2} />{busy ? "Invio…" : "Concludi e invia"}
+            </button>
+          )}
+
+          {/* Motivo del blocco «Prosegui» per lo step corrente. */}
+          {!puoAvanzare && step === 0 && <span style={hintStyle}>Seleziona un procedimento</span>}
+          {!puoAvanzare && step === 1 && (
+            <span style={hintStyle}>
+              {emailMancante ? "Inserisci l'email di contatto" : "Completa i dati del titolare delegante"}
+            </span>
+          )}
+          {!puoAvanzare && step === 2 && (
+            <span style={hintStyle}>{campiMancanti.length} campo{campiMancanti.length === 1 ? "" : "i"} obbligatori da compilare</span>
+          )}
+          {!puoAvanzare && step === 3 && (
+            <span style={hintStyle}>{docObblMancanti.length} documento{docObblMancanti.length === 1 ? "" : "i"} obbligatori da allegare</span>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+const hintStyle = { fontSize: 12, color: "var(--rosso, #a62c2c)", fontWeight: 600 };
+
+// ── «Le mie istanze» ─────────────────────────────────────────────────────────
+// Consultazione FO delle pratiche del titolare del codice fiscale (presentate in
+// proprio o come tecnico delegato), con stato e ricevuta scaricabile.
+const STATO_LABEL = {
+  presentata: { txt: "Presentata / protocollata", bg: "var(--verde-bg, #f0faf4)", fg: "var(--verde, #1a7a45)" },
+};
+
+export function MieIstanze({ identita, toast }) {
+  const [ist, setIst] = useState(null);
+
+  useEffect(() => {
+    if (!identita?.cf) { setIst([]); return; }
+    api.sueMieIstanze(identita.cf).then(r => setIst(r.istanze)).catch(() => setIst([]));
+  }, [identita]);
+
+  if (ist === null) return <div className="card"><div className="card__body"><div className="muted">Caricamento…</div></div></div>;
+  if (!ist.length) return (
+    <div className="card"><div className="card__body">
+      <div className="muted" style={{ fontSize: 13.5 }}>
+        Nessuna istanza collegata al codice fiscale <b className="mono">{identita?.cf}</b>.
+        Usa «Presenta istanza» per inviarne una.
+      </div>
+    </div></div>
+  );
+
+  return (
+    <div className="card"><div className="card__body">
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 12 }}>
+        {ist.length} istanz{ist.length === 1 ? "a" : "e"} collegat{ist.length === 1 ? "a" : "e"} a <b className="mono">{identita?.cf}</b>.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {ist.map(i => {
+          const st = STATO_LABEL[i.stato] || { txt: i.stato, bg: "var(--surface-2)", fg: "var(--text-muted)" };
+          const delega = i.ruoloPresentatore === "tecnico_delegato";
+          return (
+            <div key={i.cui} style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <Icon name="building" size={20} stroke={1.9} style={{ color: "var(--blu, #0066cc)", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{i.procedimento}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    CUI <span className="mono">{i.cui}</span> · protocollo <span className="mono">{i.protocollo || "—"}</span> · {i.creato}
+                  </div>
+                  {delega && (
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
+                      Titolare {[i.deleganteNome, i.deleganteCognome].filter(Boolean).join(" ") || "—"} · come tecnico
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 12, background: st.bg, color: st.fg, whiteSpace: "nowrap" }}>
+                  {st.txt}
+                </span>
+                <button className="btn btn--subtle btn--sm" onClick={() => scaricaRicevuta(i)}>
+                  <Icon name="download" size={13} stroke={2} />Ricevuta
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div></div>
   );
 }

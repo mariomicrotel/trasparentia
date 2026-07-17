@@ -1312,6 +1312,15 @@ def sue_crea_istanza(payload: dict = Body(...), db: Session = Depends(get_db)):
             "istanza": ist.dict()}
 
 
+@router.get("/sue/mie-istanze")
+def sue_mie_istanze(cf: str = "", db: Session = Depends(get_db)):
+    """Front-office «Le mie istanze» (PUBBLICO): le istanze presentate dal
+    titolare del codice fiscale, in proprio o come tecnico delegato. Prototipo:
+    in produzione il CF sarebbe quello dell'identità SPID/CIE/CNS autenticata,
+    non un parametro libero — così ognuno vede solo le proprie pratiche."""
+    return {"istanze": sue_module.lista_per_cf(db, cf)}
+
+
 @router.get("/sue/istanze")
 def sue_lista(me: str = Depends(auth_user), db: Session = Depends(get_db)):
     """Back-office: elenco delle istanze SUE presentate."""
